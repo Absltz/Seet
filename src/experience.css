@@ -1,7 +1,7 @@
 /* Seet experience: a data sculpture built from the brand's three ascending strokes. */
 /* Design critique: keep the analysis surface quiet; give the entrance its own scale. */
 :root {
-  --experience-paper: #f7f8f3;
+  --experience-paper: #f5f4ee;
   --experience-white: #fff;
   --experience-ink: #183c30;
   --experience-green: #286549;
@@ -146,62 +146,9 @@ body {
   text-decoration: underline;
   text-underline-offset: 6px;
 }
-
-/* A single, local SVG scene: no canvas, remote assets, or continuous render loop. */
 .data-sculpture {
   width: 100%;
   position: relative;
-}
-.sculpture-art {
-  width: 100%;
-  height: auto;
-  display: block;
-  overflow: visible;
-}
-.sculpture-column {
-  transform-box: fill-box;
-  transform-origin: center bottom;
-}
-.column-front {
-  fill: var(--experience-chart-dark);
-}
-.column-side {
-  fill: var(--experience-green);
-}
-.column-top {
-  fill: var(--experience-sage);
-}
-.column-0 .column-front {
-  fill: var(--experience-chart-light);
-}
-.column-0 .column-side {
-  fill: var(--experience-green);
-}
-.column-1 .column-front {
-  fill: var(--experience-sage);
-}
-.column-1 .column-side {
-  fill: var(--experience-chart-light);
-}
-.column-2 .column-top {
-  fill: var(--experience-lime);
-}
-.column-highlight {
-  stroke: var(--experience-paper);
-  stroke-opacity: 0.22;
-}
-.sculpture-orbit {
-  stroke: var(--experience-sage);
-  stroke-width: 1;
-  stroke-dasharray: 2 8;
-}
-.sculpture-axis {
-  stroke: var(--experience-chart-light);
-  stroke-width: 1;
-}
-.sculpture-caption text {
-  fill: var(--experience-muted);
-  font-size: 13px;
 }
 
 /* Login: immersive brand field, compact and usable account form. */
@@ -252,18 +199,6 @@ body {
 .login-visual .data-sculpture {
   max-width: none;
 }
-.login-visual .sculpture-orbit {
-  stroke: var(--experience-dark-rule);
-}
-.login-visual .sculpture-axis {
-  stroke: var(--experience-dark-rule);
-}
-.login-visual .sculpture-caption text {
-  fill: var(--experience-dark-muted);
-}
-.login-visual .column-side {
-  fill: var(--experience-chart-dark);
-}
 .login-visual-foot {
   position: relative;
   z-index: 2;
@@ -278,6 +213,7 @@ body {
 }
 .login-entry {
   position: relative;
+  background: var(--experience-paper);
   display: flex;
   flex-direction: column;
   padding: 40px clamp(28px, 5vw, 88px) 28px;
@@ -448,20 +384,20 @@ body {
 .home-header .account-area {
   gap: 8px;
   padding: 3px 6px 3px 4px;
-  border: 1px solid var(--experience-dark-rule);
+  border: 1px solid var(--experience-rule);
   border-radius: 28px;
 }
 .home-header .account-button {
   min-height: 40px;
   gap: 10px;
   padding-right: 4px;
-  color: var(--experience-on-dark);
+  color: var(--experience-ink);
 }
 .home-header .avatar {
   width: 34px;
   height: 34px;
-  background: var(--experience-dark-rule);
-  color: var(--experience-lime);
+  background: var(--experience-stage);
+  color: var(--experience-green);
   font-size: 14px;
 }
 .home-header .account-name {
@@ -475,14 +411,14 @@ body {
   padding: 8px;
   border-radius: 20px;
   font-size: 13px;
-  color: var(--experience-dark-muted);
+  color: var(--experience-muted);
 }
 .home-header .account-button:hover,
 .home-header .logout-button:hover {
-  color: var(--experience-lime);
+  color: var(--experience-green);
 }
 .home-header .logout-button:hover {
-  background: var(--experience-dark-rule);
+  background: var(--experience-stage);
 }
 .home-hero {
   position: relative;
@@ -527,12 +463,7 @@ body {
   max-width: 580px;
   margin-inline: auto;
 }
-.home-hero-note {
-  text-align: center;
-  font-size: 12px;
-  margin: -20px 28px 0;
-  color: var(--experience-muted);
-}
+
 .home-hero-bottom {
   position: absolute;
   display: flex;
@@ -549,13 +480,14 @@ body {
   width: 46px;
   height: 46px;
   flex-shrink: 0;
-  border: 1px solid var(--experience-dark-rule);
+  border: 1px solid var(--experience-stage);
   border-radius: 50%;
-  color: var(--experience-on-dark);
-  background: var(--experience-dark-rule);
+  color: var(--experience-green);
+  background: var(--experience-stage);
 }
 .home-scroll-cue:hover {
   background: var(--experience-green);
+  color: var(--experience-white);
 }
 .login-arrival-layer {
   position: fixed;
@@ -566,8 +498,8 @@ body {
 }
 .login-arrival-stage {
   position: absolute;
+  inset: 0;
   display: block;
-  will-change: transform;
 }
 .login-arrival-stage canvas {
   display: block;
@@ -782,9 +714,10 @@ body {
   color: var(--experience-muted);
 }
 .home-report {
-  background: var(--experience-dark);
-  color: var(--experience-on-dark);
+  background: var(--experience-paper);
+  color: var(--experience-ink);
   overflow: clip;
+  scroll-margin-top: 28px;
 }
 .report-layout {
   display: grid;
@@ -792,20 +725,23 @@ body {
   align-items: center;
   gap: 100px;
   min-height: 760px;
-  padding-top: 80px;
+  padding-block: 100px;
 }
 .report-showcase {
-  align-self: end;
+  align-self: center;
   max-width: 580px;
   padding-inline: 12px;
+  perspective: 1200px;
 }
 .report-preview-sheet {
-  background: var(--experience-paper);
+  background: var(--experience-white);
   color: var(--experience-ink);
   padding: 34px 32px 40px;
-  border-radius: 5px 5px 0 0;
+  border-radius: 5px;
   transform: rotate(-3deg);
   transform-origin: center bottom;
+  backface-visibility: hidden;
+  box-shadow: 0 24px 55px rgb(36 49 36 / 12%);
 }
 .report-paper-head {
   display: flex;
@@ -873,13 +809,13 @@ body {
   margin-top: 8px;
 }
 .report-copy {
-  padding-bottom: 80px;
+  padding-bottom: 0;
 }
 .report-copy h2 {
-  color: var(--experience-on-dark);
+  color: var(--experience-ink);
 }
 .report-copy > p {
-  color: var(--experience-dark-muted);
+  color: var(--experience-muted);
   margin-top: 28px;
   font-size: 16px;
   line-height: 1.9;
@@ -896,11 +832,34 @@ body {
   display: flex;
   gap: 12px;
   align-items: center;
-  color: var(--experience-on-dark);
+  color: var(--experience-ink);
   font-size: 14px;
 }
 .report-copy li svg {
-  color: var(--experience-lime);
+  color: var(--experience-green);
+}
+@media (max-height: 850px) and (min-width: 761px) {
+  .report-layout {
+    min-height: calc(100svh - 56px);
+    padding-block: clamp(36px, 7.5vh, 64px);
+  }
+  .report-preview-sheet {
+    padding: 28px;
+  }
+  .report-preview-sheet > h3 {
+    font-size: 26px;
+    line-height: 1.4;
+    margin-top: 24px;
+  }
+  .report-paper-metrics {
+    margin-top: 20px;
+  }
+  .report-paper-metrics strong {
+    font-size: 26px;
+  }
+  .report-preview-sheet .sample-chart {
+    max-height: 210px;
+  }
 }
 .home-closing {
   display: flex;
@@ -962,10 +921,7 @@ body {
     min-height: 380px;
     padding: 32px 0 24px;
   }
-  .home-hero-note {
-    margin-inline: 24px;
-    font-size: 11px;
-  }
+
   .sample-conversation {
     padding: 32px 24px;
   }
@@ -1067,14 +1023,7 @@ body {
     padding: 20px 12px 26px;
     border-radius: 45% 45% 10px 10px;
   }
-  .home-hero-art .sculpture-art {
-    max-height: 360px;
-  }
-  .home-hero-note {
-    margin-top: -20px;
-    margin-inline: 16px;
-    font-size: 11px;
-  }
+
   .home-hero-bottom {
     font-size: 11px;
     bottom: 8px;
@@ -1156,7 +1105,7 @@ body {
   }
   .report-layout {
     grid-template-columns: minmax(0, 1fr);
-    padding-top: 60px;
+    padding-block: 64px;
     gap: 48px;
   }
   .report-copy {
@@ -1237,9 +1186,6 @@ body {
     font-size: 13px;
     margin-top: 16px;
   }
-  .login-visual .sculpture-caption {
-    display: none;
-  }
   .login-visual-foot {
     display: none;
   }
@@ -1307,16 +1253,12 @@ body {
     scroll-behavior: auto !important;
   }
 }
-
-/* A real WebGL diorama; the SVG remains as a graceful GPU fallback. */
 .data-island {
   position: relative;
   aspect-ratio: 1.25;
   isolation: isolate;
 }
-.island-canvas,
-.island-fallback,
-.island-labels {
+.island-canvas {
   position: absolute;
   inset: 0;
 }
@@ -1324,27 +1266,6 @@ body {
   display: block;
   width: 100%;
   height: 100%;
-}
-.island-labels {
-  pointer-events: none;
-  opacity: 0;
-}
-.scene-ready .island-labels {
-  opacity: 1;
-}
-.scene-ready .island-fallback {
-  visibility: hidden;
-}
-.scene-label {
-  position: absolute;
-  left: 0;
-  top: 0;
-  padding: 4px 12px;
-  background: var(--experience-stage);
-  color: var(--experience-ink);
-  font-size: 12px;
-  border-radius: 5px;
-  white-space: nowrap;
 }
 .login-visual .data-island {
   /* 放大场景，从画框左下角裁出主体；透明文字层始终叠在模型前方。 */
@@ -1359,27 +1280,29 @@ body {
 }
 .home-header-band,
 .home-hero-band {
-  background: var(--experience-dark);
-  color: var(--experience-on-dark);
+  background: var(--experience-paper);
+  color: var(--experience-ink);
 }
-.home-header .seet-brand,
+.home-header .seet-brand {
+  color: var(--experience-green);
+}
 .home-header .seet-brand strong {
-  color: var(--experience-on-dark);
+  color: var(--experience-ink);
 }
 .home-header .seet-brand > span {
-  color: var(--experience-dark-muted);
+  color: var(--experience-muted);
 }
 .home-header nav a:hover {
-  color: var(--experience-lime);
+  color: var(--experience-green);
 }
 .home-header .experience-button,
 .home-hero .experience-button {
-  background: var(--experience-lime);
-  color: var(--experience-dark) !important;
+  background: var(--experience-green);
+  color: var(--experience-white) !important;
 }
 .home-header .experience-button:hover,
 .home-hero .experience-button:hover {
-  background: var(--experience-on-dark);
+  background: var(--experience-hover);
 }
 .home-hero {
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr);
@@ -1388,11 +1311,11 @@ body {
   padding-bottom: 90px;
 }
 .home-hero h1 {
-  color: var(--experience-on-dark);
+  color: var(--experience-ink);
 }
 .home-hero-copy > p,
 .home-hero-bottom {
-  color: var(--experience-dark-muted);
+  color: var(--experience-muted);
 }
 .home-hero-art {
   background: transparent;
@@ -1405,16 +1328,13 @@ body {
   height: clamp(340px, calc(100svh - 250px), 576px);
   aspect-ratio: auto;
 }
-.home-hero-note {
-  margin: 18px 28px 0;
-  color: var(--experience-dark-muted);
-}
+
 .home-hero-bottom p span {
-  color: var(--experience-on-dark);
+  color: var(--experience-ink);
 }
 .home-header :is(a, button):focus-visible,
 .home-hero :is(a, button):focus-visible {
-  outline-color: var(--experience-lime);
+  outline-color: var(--experience-green);
 }
 @media (max-width: 1100px) {
   .home-hero {
@@ -1444,22 +1364,12 @@ body {
     height: auto;
     aspect-ratio: 1.25;
   }
-  .home-hero-note {
-    margin-top: 12px;
-  }
-  .scene-label {
-    font-size: 10px;
-    padding: 3px 8px;
-  }
   .login-visual .data-island {
     width: min(146%, 720px);
     height: 440px;
     left: -40%;
     bottom: -85px;
     opacity: 1;
-  }
-  .login-visual .island-labels {
-    display: none;
   }
 }
 
@@ -1487,4 +1397,141 @@ body {
   .login-story-copy p {
     margin-top: 16px;
   }
+}
+
+/* 登录场景沿左下画框裁切，主页使用暖白画布。 */
+.login-visual .data-island {
+  left: -43%;
+  bottom: -24vh;
+  width: 150%;
+  height: 112vh;
+  min-height: 600px;
+  max-height: none;
+}
+
+@media (max-width: 760px) {
+  .login-visual .data-island {
+    left: -38%;
+    width: 145%;
+    height: 440px;
+    min-height: 0;
+    bottom: -65px;
+  }
+}
+
+.login-visual-foot {
+  margin-top: auto;
+}
+@media (max-width: 760px) {
+  .login-visual {
+    min-height: 570px;
+  }
+}
+
+/* The resting home canvas uses the same large frame as the arrival destination.
+   Expand the actual canvas, not a temporary CSS scale, so rehosting cannot shrink it. */
+.home-hero-art .island-canvas {
+  inset: -30%;
+}
+.home-hero-band {
+  overflow: clip;
+}
+@media (max-width: 760px) {
+  .home-hero-art .island-canvas {
+    inset: -12.5%;
+  }
+}
+
+/* First paint contains no legacy SVG model. Reveal only after the live scene renders. */
+.data-island > .island-canvas {
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.data-island.scene-ready > .island-canvas {
+  opacity: 1;
+}
+.scene-loading,
+.scene-unavailable {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--experience-dark-muted);
+  font-size: 12px;
+}
+.scene-loading {
+  display: flex;
+  gap: 6px;
+}
+.scene-loading span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+.home-experience {
+  isolation: isolate;
+}
+.login-arrival-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  background: var(--experience-dark);
+  pointer-events: none;
+}
+.login-arrival-paper {
+  position: absolute;
+  inset: 0;
+  background: var(--experience-paper);
+  transform-origin: right center;
+  will-change: transform;
+}
+.home-experience > .login-arrival-backdrop {
+  z-index: -1;
+}
+.home-experience.is-arriving :is(.home-header-band, .home-hero-band) {
+  background: transparent;
+}
+.home-experience :is(.scene-loading, .scene-unavailable) {
+  color: var(--experience-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .data-island > .island-canvas {
+    transition: none;
+  }
+}
+
+/* 选项滑块和两组文案共用稳定布局，输入值与焦点不因切换而重建。 */
+.auth-copy-stack { display: grid; }
+.auth-copy-stack > div { grid-area: 1 / 1; transition: opacity .32s ease, transform .42s cubic-bezier(.22,.61,.36,1), visibility 0s linear .32s; }
+.auth-copy-stack > [aria-hidden="true"] { opacity: 0; transform: translateY(9px); visibility: hidden; }
+.auth-copy-stack > [aria-hidden="false"] { opacity: 1; transform: translateY(0); transition-delay: 0s; }
+.login-experience .auth-tabs { position: relative; isolation: isolate; }
+.login-experience .auth-tabs button { position: relative; z-index: 1; background: transparent; transition: color .25s ease; }
+.login-experience .auth-tabs button.selected { background: transparent; }
+.auth-tab-indicator { position: absolute; left: 4px; top: 4px; bottom: 4px; width: calc(50% - 4px); border-radius: 4px; background: #fff; transition: transform .48s cubic-bezier(.22,.61,.36,1); pointer-events: none; }
+.auth-mode-register .auth-tab-indicator { transform: translateX(100%); }
+.auth-hint-reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .48s cubic-bezier(.22,.61,.36,1), opacity .3s ease; }
+.auth-hint-reveal.is-open { grid-template-rows: 1fr; opacity: 1; }
+.auth-hint-reveal > div { min-height: 0; overflow: hidden; }
+.auth-submit-label { display: grid; }
+.auth-submit-label > span { grid-area: 1 / 1; transition: opacity .25s ease, transform .35s ease; }
+.auth-submit-label > [aria-hidden="true"] { opacity: 0; transform: translateY(5px); visibility: hidden; }
+.auth-submit-label > [aria-hidden="false"] { opacity: 1; transform: translateY(0); }
+.home-scroll-cue { display: flex; width: auto; height: auto; gap: 17px; padding: 9px 10px 9px 20px; border-color: #d4ded1; border-radius: 40px; background: transparent; }
+.scroll-cue-copy { text-align: right; font-size: 14px; color: var(--experience-green); line-height: 1.5; }
+.scroll-cue-copy > span { display: block; font-size: 11px; color: var(--experience-muted); }
+.scroll-cue-arrow { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--experience-green); color: #fff; }
+.home-scroll-cue:hover { background: var(--experience-stage); color: var(--experience-green); }
+@media (max-width: 760px) {
+  .home-hero-bottom { align-items: end; gap: 10px; }
+  .home-hero-bottom > p { max-width: 50%; font-size: 11px; }
+  .home-scroll-cue { gap: 8px; padding: 6px 7px 6px 12px; }
+  .scroll-cue-copy { font-size: 12px; }
+  .scroll-cue-copy > span { display: none; }
+  .scroll-cue-arrow { width: 36px; height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-copy-stack > div, .auth-tab-indicator, .auth-hint-reveal, .auth-submit-label > span { transition: none; }
 }

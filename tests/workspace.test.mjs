@@ -65,9 +65,9 @@ const post = (base, url, body, cookie) =>
     body: JSON.stringify(body),
   });
 
-test("help and login subpages load directly", async (t) => {
+test("home, help, login and history pages load directly", async (t) => {
   const { base } = await start(t);
-  for (const route of ["/help", "/login", "/history"]) {
+  for (const route of ["/home", "/help", "/login", "/history"]) {
     const r = await fetch(base + route);
     assert.equal(r.status, 200);
     assert.match(r.headers.get("content-type"), /text\/html/);

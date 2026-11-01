@@ -146,12 +146,16 @@ function SampleChart({ kind }) {
     () => {
       const media = gsap.matchMedia();
       media.add("(prefers-reduced-motion: no-preference)", () => {
-        gsap.from(".sample-mark", {
+        gsap.fromTo(".sample-mark", {
           scaleY: 0,
           transformOrigin: "50% 100%",
-          stagger: 0.035,
-          duration: 0.65,
-          ease: "power3.out",
+        }, {
+          scaleY: 1, stagger: .055, duration: .85, ease: "power3.out",
+          scrollTrigger: { trigger: root.current, start: "top 85%", toggleActions: "play none none reset" },
+        });
+        gsap.fromTo(".sample-value", { opacity: 0, y: 6 }, {
+          opacity: 1, y: 0, stagger: .055, duration: .45, delay: .18,
+          scrollTrigger: { trigger: root.current, start: "top 85%", toggleActions: "play none none reset" },
         });
       });
       return () => media.revert();
@@ -239,8 +243,7 @@ export function HomePage({ navigate, user, accountControls }) {
               ".home-hero-copy > *",
               { y: 32, opacity: 0, stagger: 0.1 },
               0.1,
-            )
-            .from(".home-hero-note", { opacity: 0, y: 16 }, 0.65);
+            );
         gsap.to(".home-scroll-cue svg", {
           y: 7,
           duration: 0.85,
@@ -248,16 +251,32 @@ export function HomePage({ navigate, user, accountControls }) {
           yoyo: true,
           ease: "sine.inOut",
         });
-        // Only the report composition follows scroll; text remains readable at rest.
-        gsap.from(".report-preview-sheet", {
-          y: 65,
-          rotation: 4,
-          ease: "none",
+        const report = root.current.querySelector(".report-preview-sheet");
+        const showcase = root.current.querySelector(".report-showcase");
+        const narrow = () => window.matchMedia("(max-width: 760px)").matches;
+        // 只让报告纸旋入，右侧说明保持稳定；从真实画框左边界外进入。
+        gsap.fromTo(report, {
+          x: () => -(showcase.getBoundingClientRect().left + report.offsetWidth * 1.2),
+          y: () => narrow() ? 55 : 110,
+          rotation: () => narrow() ? -17 : -28,
+          rotationY: () => narrow() ? 15 : 32,
+          scale: 0.86,
+          opacity: 0,
+          transformOrigin: "75% 85%",
+        }, {
+          x: 0,
+          y: 0,
+          rotation: -3,
+          rotationY: 0,
+          scale: 1,
+          opacity: 1,
+          ease: "power2.out",
           scrollTrigger: {
-            trigger: ".home-report",
-            start: "top 85%",
-            end: "center center",
-            scrub: 0.8,
+            trigger: showcase,
+            start: "top bottom",
+            end: "top 18%",
+            scrub: 0.65,
+            invalidateOnRefresh: true,
           },
         });
         return () => arrivalCleanup?.();
@@ -277,7 +296,7 @@ export function HomePage({ navigate, user, accountControls }) {
             <Brand />
           </RouteLink>
           <nav aria-label="主页导航">
-            <SectionLink href="#discover">产品功能</SectionLink>
+            <SectionLink href="#report">产品功能</SectionLink>
             <RouteLink to="/history" navigate={navigate}>
               分析记录
             </RouteLink>
@@ -315,7 +334,6 @@ export function HomePage({ navigate, user, accountControls }) {
             </div>
             <div className="home-hero-art">
               <DataSculpture />
-              <p className="home-hero-note">看见数据，也看见可能。</p>
             </div>
             <div className="home-hero-bottom">
               <p>
@@ -323,14 +341,81 @@ export function HomePage({ navigate, user, accountControls }) {
               </p>
               <SectionLink
                 className="home-scroll-cue"
-                href="#discover"
-                aria-label="向下查看产品功能"
+                href="#report"
+                aria-label="向下查看分析报告示例"
               >
-                <ArrowDown size={22} aria-hidden="true" />
+                <span className="scroll-cue-copy">向下探索<span>看看数据如何变成发现</span></span>
+                <span className="scroll-cue-arrow"><ArrowDown size={23} aria-hidden="true" /></span>
               </SectionLink>
             </div>
           </section>
         </div>
+        <section className="home-report" id="report" tabIndex={-1}>
+          <div className="experience-container report-layout">
+            <div
+              className="report-showcase"
+              aria-label="一周咖啡销量分析报告示例"
+            >
+              <div className="report-preview-sheet">
+                <div className="report-paper-head">
+                  <Brand />
+                  <span>分析报告示例</span>
+                </div>
+                <h3>
+                  这一周的销售，
+                  <br />
+                  值得多看一眼。
+                </h3>
+                <p>一周咖啡销量分析</p>
+                <div className="report-paper-metrics">
+                  <div>
+                    <span>一周总销量</span>
+                    <strong>
+                      1,260<small> 杯</small>
+                    </strong>
+                  </div>
+                  <div>
+                    <span>销量最高</span>
+                    <strong>周六</strong>
+                  </div>
+                </div>
+                <SampleChart kind="line" />
+                <div className="report-paper-text">
+                  <h4>从数字到发现</h4>
+                  <p>
+                    周六为一周销量峰值。结合每日趋势，进一步关注周末的备货与排班安排。
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="report-copy">
+              <h2>
+                探索之后，
+                <br />
+                把发现留下来。
+              </h2>
+              <p>
+                结合完整数据与对话中的问题，
+                <br />
+                生成包含图表、结论与建议的分析报告。
+              </p>
+              <ul>
+                <li>
+                  <Check size={18} aria-hidden="true" />
+                  整体分析与问题专题
+                </li>
+                <li>
+                  <Check size={18} aria-hidden="true" />
+                  预览确认，再导出 PDF
+                </li>
+                <li>
+                  <Check size={18} aria-hidden="true" />
+                  保存到你的分析记录
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
         <section
           className="home-discover experience-container"
           id="discover"
@@ -432,72 +517,6 @@ export function HomePage({ navigate, user, accountControls }) {
               <Mic aria-hidden="true" />
               <h3>也可以，用声音</h3>
               <p>点击语音按钮，说出你的想法，识别后确认发送。</p>
-            </div>
-          </div>
-        </section>
-        <section className="home-report">
-          <div className="experience-container report-layout">
-            <div
-              className="report-showcase"
-              aria-label="一周咖啡销量分析报告示例"
-            >
-              <div className="report-preview-sheet">
-                <div className="report-paper-head">
-                  <Brand />
-                  <span>分析报告示例</span>
-                </div>
-                <h3>
-                  这一周的销售，
-                  <br />
-                  值得多看一眼。
-                </h3>
-                <p>一周咖啡销量分析</p>
-                <div className="report-paper-metrics">
-                  <div>
-                    <span>一周总销量</span>
-                    <strong>
-                      1,260<small> 杯</small>
-                    </strong>
-                  </div>
-                  <div>
-                    <span>销量最高</span>
-                    <strong>周六</strong>
-                  </div>
-                </div>
-                <SampleChart kind="line" />
-                <div className="report-paper-text">
-                  <h4>从数字到发现</h4>
-                  <p>
-                    周六为一周销量峰值。结合每日趋势，进一步关注周末的备货与排班安排。
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="report-copy">
-              <h2>
-                探索之后，
-                <br />
-                把发现留下来。
-              </h2>
-              <p>
-                结合完整数据与对话中的问题，
-                <br />
-                生成包含图表、结论与建议的分析报告。
-              </p>
-              <ul>
-                <li>
-                  <Check size={18} aria-hidden="true" />
-                  整体分析与问题专题
-                </li>
-                <li>
-                  <Check size={18} aria-hidden="true" />
-                  预览确认，再导出 PDF
-                </li>
-                <li>
-                  <Check size={18} aria-hidden="true" />
-                  保存到你的分析记录
-                </li>
-              </ul>
             </div>
           </div>
         </section>

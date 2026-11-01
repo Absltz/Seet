@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import gsap from "gsap";
+import { departForWorkbench, hasWorkbenchArrival } from "./workbenchArrival.js";
 
 // Presentation-only routing: keep existing history, authentication and data flows.
 export function usePageMotion(page) {
@@ -17,6 +18,7 @@ export function usePageMotion(page) {
     previous.current = page;
     if (
       !changed ||
+      (page === "/" && hasWorkbenchArrival()) ||
       ["/home", "/login"].includes(page) ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     )
@@ -45,7 +47,7 @@ export function usePageMotion(page) {
     [],
   );
 
-  return function leaveHome(commit) {
+  return function leaveHome(commit, target) {
     const surface = document.querySelector(".home-experience");
     if (
       !surface ||
@@ -64,6 +66,10 @@ export function usePageMotion(page) {
       clearTimeout(deadline.current);
       flushSync(commit);
     };
+    if (target === "/") {
+      const handoff = departForWorkbench(surface, finish);
+      if (handoff) { departure.current = handoff; return; }
+    }
     // Navigation must also finish when a low frame rate throttles the tween.
     deadline.current = setTimeout(finish, 400);
     departure.current = gsap.to(surface, {

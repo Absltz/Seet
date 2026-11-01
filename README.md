@@ -16,10 +16,12 @@
 | 团队编号 | 42657 |
 | 所属院校 | 周口师范学院 |
 | 团队成员 | 刘鹏洋、李文浩、张博睿 |
-| 仓库维护 | [@Ablst](https://github.com/Ablst) |
+| 仓库维护 | [@Absltz](https://github.com/Absltz) |
 
 ## 功能
 
+- 登录页与品牌主页使用三维模型和连续过渡；进入工作台时，AI 核心随公转动画落位到对话区。
+- 工作台采用 AI 对话与分析画布双栏布局，支持收起对话区，扩大图表展示空间。
 - 导入 XLSX、CSV、TSV、JSON、TXT，或用自然语言录入数据。
 - MiMo Agent 执行单值或多值筛选、日期汇总、统计及图表切换，展示实际工具执行过程。
 - 支持柱状图、折线图、占比图，原始明细与图表筛选同步，保留完整原始数据。
@@ -34,6 +36,7 @@
 | 层次 | 技术与职责 |
 | --- | --- |
 | 前端 | React、Vite、Recharts、Lucide、react-markdown |
+| 三维与动效 | Three.js、GSAP、ScrollTrigger，提供模型轮播、页面过渡与滚动图表动画 |
 | 数据 | 共享 JavaScript 计算模块、Papa Parse、read-excel-file |
 | 后端 | Node.js、Express，提供认证、记录、Agent、语音和报告接口 |
 | AI | 小米 MiMo、Vercel AI SDK、Zod 校验 |
@@ -48,7 +51,7 @@
 需要 **Node.js 22.12 或以上版本**及 npm。调用 AI 时需要能访问 MiMo API。
 
 ```bash
-git clone https://github.com/Ablst/Seet.git
+git clone https://github.com/Absltz/Seet.git
 cd Seet
 npm ci
 npm run build
@@ -90,7 +93,7 @@ npm run build
 
 ## 评审体验
 
-1. 启动服务，注册并登录。
+1. 启动服务，注册并登录，从品牌主页进入 AI 工作台。
 2. 上传自己的表格、使用 `samples/` 模拟文件，或直接输入带数字的自然语言。
 3. 提出筛选、对比、日期汇总或图表切换需求，展开执行过程核对结果。
 4. 查看图表及筛选明细，或导出 CSV。

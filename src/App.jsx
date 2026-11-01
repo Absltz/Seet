@@ -24,7 +24,6 @@ import {
   SlidersHorizontal,
   LoaderCircle,
   FileSpreadsheet,
-  MessageSquare,
   ArrowRight,
   BookOpen,
   Link2,
@@ -60,6 +59,7 @@ import { reportKeyFor, serializeReport, restoreReport } from "./reportState.mjs"
 const ChartView = lazy(() => import("./components/ChartView.jsx"));
 import DataTable from "./components/DataTable.jsx";
 import ChartBoundary from "./components/ChartBoundary.jsx";
+import WorkbenchSurface, { AICore } from "./components/WorkbenchSurface.jsx";
 
 const clubText =
   "摄影社报名80人、到场62人；篮球社报名120人、到场108人；读书会报名50人、到场45人。";
@@ -187,10 +187,11 @@ export default function App() {
   function navigate(target) {
     const commit = () => {
       if (location.pathname !== target) history.pushState(null, "", target);
+      if (page === "/home" && target === "/") setSidebar(true);
       setPage(target);
       window.scrollTo(0, 0);
     };
-    if (page === "/home" && target !== page) leaveHome(commit);
+    if (page === "/home" && target !== page) leaveHome(commit, target);
     else commit();
   }
   function focusAI() {
@@ -689,42 +690,33 @@ export default function App() {
       </div>
     );
   return (
-    <div className="app-frame agent-app">
+    <WorkbenchSurface viewKey={`${tab}:${chart}:${metric?.key}:${analyzed?.rows.length}`}>
       {header}
       <fieldset
         className={`workspace ${sidebar ? "" : "sidebar-closed"}`}
         disabled={records.loading}
       >
-        <aside className="sidebar" aria-label="数据输入与分析对话">
-          <div className="side-title">
-            <h2>
-              <MessageSquare size={18} />
-              AI 分析工作台
-            </h2>
-            <button
-              className="icon-button"
-              aria-label="收起输入面板"
-              onClick={() => setSidebar(false)}
-            >
-              <PanelLeftClose size={17} />
-            </button>
-          </div>
-          <button
-            className="new-analysis"
-            onClick={clear}
-            disabled={busy || records.loading}
-          >
-            <Plus size={16} />
-            新建分析
-          </button>
+        <aside className="sidebar" aria-label="数据输入与分析对话" data-workbench-pane>
           <section className="agent-thread" aria-label="AI 分析助手">
             <header className="composer-agent-heading">
-              <span>
-                <Sparkles size={19} />
-                <strong>AI 分析助手</strong>
-              </span>
-              <small className="assistant-model-name">{model}</small>
+              <div className="assistant-identity">
+                <AICore working={busy} />
+                <div><h2>AI 分析助手</h2><small className="assistant-model-name">{model}</small></div>
+              </div>
+              <div className="thread-heading-actions">
+                <button className="new-analysis" aria-label="新建分析" title="新建分析" onClick={clear} disabled={busy || records.loading}>
+                  <Plus size={15} /><span>新建分析</span>
+                </button>
+                <button className="panel-toggle panel-toggle-close" aria-label="收起输入面板" title="收起 AI 对话面板" onClick={() => setSidebar(false)}>
+                  <PanelLeftClose size={17} /><span>收起</span>
+                </button>
+              </div>
             </header>
+            <div className="thread-context">
+              <FileSpreadsheet size={14} />
+              <span>{dataset?.title || "新的分析对话"}</span>
+              <small>{dataset ? `${dataset.rows.length} 行` : "等待添加数据"}</small>
+            </div>
             <div className="conversation" aria-live="polite">
               {messages.map((m, i) => (
                 <div className={`message ${m.role}`} key={i}>
@@ -972,7 +964,7 @@ export default function App() {
             思考由小米 MiMo 提供支持
           </p>
         </aside>
-        <main className="main-sheet">
+        <main className="main-sheet" data-workbench-pane>
           {examples && (
             <section className="examples-tray">
               <div className="section-heading">
@@ -1008,11 +1000,11 @@ export default function App() {
               <div className="title-row">
                 {!sidebar && (
                   <button
-                    className="icon-button"
+                    className="panel-toggle panel-toggle-open"
                     aria-label="展开输入面板"
                     onClick={() => setSidebar(true)}
                   >
-                    <PanelLeftOpen size={19} />
+                    <PanelLeftOpen size={19} /><span>展开</span>
                   </button>
                 )}
                 <h1>
@@ -1024,10 +1016,12 @@ export default function App() {
                   <span className="sample-tag">演示数据</span>
                 )}
               </div>
-              <p>
+              <p className="dataset-description">
                 {draft
                   ? "确认名称、数值和单位，结果将从这里生成。"
-                  : "从零散数字，到看得见的答案。"}
+                  : dataset
+                    ? `${filteredSource.rows.length} 行${view?.filters?.length ? ` / 全部 ${dataset.rows.length} 行` : "原始数据"} · ${dataset.metrics.length} 个指标`
+                    : "分析画布"}
               </p>
             </div>
             <button
@@ -1181,6 +1175,14 @@ export default function App() {
                         </div>
                       </div>
                       <div className="chart-toolbar">
+                        <details className="analysis-settings" onKeyDown={(e) => {
+                          if (e.key === "Escape") {
+                            e.currentTarget.open = false;
+                            e.currentTarget.querySelector("summary")?.focus();
+                          }
+                        }}>
+                          <summary><SlidersHorizontal size={14} />分析设置<ChevronDown size={13} /></summary>
+                          <div className="advanced-controls">
                         <label className="metric-select">
                           分组
                           <select
@@ -1246,7 +1248,9 @@ export default function App() {
                             </select>
                           </label>
                         )}
-                        <label className="metric-select">
+                          </div>
+                        </details>
+                        <label className="metric-select primary-metric">
                           指标
                           <select
                             aria-label="指标"
@@ -1268,7 +1272,7 @@ export default function App() {
                           onClick={() => setSort(!sort)}
                         >
                           <ChevronsUpDown size={14} />
-                          {sort ? "恢复原始顺序" : "按数值排序"}
+                          {sort ? "原始顺序" : "数值排序"}
                         </button>
                       </div>
                       <p className="view-description">
@@ -1283,7 +1287,7 @@ export default function App() {
                         <div className="active-filters">
                           {view.filters.map((f, i) => (
                             <span key={i}>
-                              {f.field}{" "}
+                              {f.field === "name" ? "分类" : f.field}{" "}
                               {
                                 {
                                   eq: "=",
@@ -1305,12 +1309,22 @@ export default function App() {
                           </button>
                         </div>
                       )}
+                      <div className="chart-summary">
                       <div className="hero-stat">
                         <span>{metric.key}合计</span>
                         <div>
                           {format(stats.total)}
                           <small>{metric.unit}</small>
                         </div>
+                      </div>
+                      <div className="finding">
+                        <span>最高值 · {stats.leaders.length ? stats.leaders.join("、") : "暂无有效值"}</span>
+                        <strong className="numeric">{format(stats.max)} <small>{metric.unit}</small></strong>
+                      </div>
+                      <div className="finding">
+                        <span>{view?.groupBy ? "每组结果平均" : "每条记录平均"}</span>
+                        <strong className="numeric">{format(stats.average)} <small>{metric.unit}</small></strong>
+                      </div>
                       </div>
                       <ChartBoundary>
                         <Suspense
@@ -1339,31 +1353,9 @@ export default function App() {
                     <aside className="insight-panel">
                       <h2>
                         <Sparkles size={17} />
-                        看见数据里的线索
+                        数据说明
                       </h2>
                       <span className="method-tag">确定性统计</span>
-                      <div className="finding">
-                        <span>最高值</span>
-                        <strong>
-                          {stats.leaders.length
-                            ? stats.leaders.join("、")
-                            : "暂无有效值"}
-                        </strong>
-                        <p>
-                          {format(stats.max)} <small>{metric.unit}</small>
-                        </p>
-                      </div>
-                      <div className="finding">
-                        <span>
-                          {view?.groupBy ? "每组结果平均" : "每条记录平均"}
-                        </span>
-                        <strong className="numeric">
-                          {format(stats.average)} <small>{metric.unit}</small>
-                        </strong>
-                        <p className="muted-note">
-                          合计 ÷ {stats.count} 个有效值
-                        </p>
-                      </div>
                       <div className="quality">
                         <div>
                           <CheckCheck size={16} />
@@ -1520,8 +1512,8 @@ export default function App() {
               <div className="empty-symbol">
                 <ChartNoAxesColumnIncreasing size={42} strokeWidth={1} />
               </div>
-              <h2>每个数字，都值得看清楚</h2>
-              <p>上传一份文件，或者把数据直接说出来。</p>
+              <h2>从一个问题，看见数据。</h2>
+              <p>上传表格，或在左侧描述你的数据。<br />图表、明细和分析报告会在这里呈现。</p>
               <button
                 className="primary-button"
                 onClick={() => fileRef.current.click()}
@@ -1541,7 +1533,7 @@ export default function App() {
                 试试用一句话录入
                 <ArrowRight size={16} />
               </button>
-              <span className="subtle">支持拖放表格、结构化数据和文本文件</span>
+              <span className="empty-formats"><span>Excel</span><span>CSV / TSV</span><span>JSON</span><span>文本</span></span>
               {previous && (
                 <button
                   className="text-button"
@@ -1602,6 +1594,6 @@ export default function App() {
           }}
         />
       )}
-    </div>
+    </WorkbenchSurface>
   );
 }
