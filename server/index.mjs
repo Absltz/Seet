@@ -128,7 +128,7 @@ app.post(["/api/extract", "/api/chat"], auth.requireAuth, async (req, res) => {
 });
 const dist = fileURLToPath(new URL("../dist", import.meta.url));
 app.use(express.static(dist));
-app.get(["/", "/help", "/login", "/history"], (_, res) =>
+app.get(["/", "/home", "/help", "/login", "/history"], (_, res) =>
   res.sendFile(dist + "/index.html"),
 );
 app.use((err, req, res, next) =>

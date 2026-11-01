@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -137,12 +139,30 @@ export function HelpPage({ navigate }) {
 }
 
 export function LoginPage({ navigate, onLogin, user }) {
+  const formRoot = useRef(null);
+  const switchPositions = useRef(null);
   const [register, setRegister] = useState(false),
     [username, setUsername] = useState(""),
     [password, setPassword] = useState(""),
     [visible, setVisible] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const switchMode = next => {
+    if (next === register) return;
+    const root = formRoot.current;
+    switchPositions.current = [...root.querySelectorAll("[data-auth-motion]")].map(node => ({ node, top: node.getBoundingClientRect().top }));
+    setRegister(next);
+    setError("");
+  };
+  useGSAP(() => {
+    if (!switchPositions.current || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const positions = switchPositions.current.map(({ node, top }) => ({ node, delta: top - node.getBoundingClientRect().top }));
+    // 只用 transform 衔接原位置与新位置，不缩放表单文字和输入控件。
+    positions.forEach(({ node, delta }) => {
+      gsap.fromTo(node, { y: delta }, { y: 0, duration: .48, ease: "power3.inOut", clearProps: "transform" });
+    });
+    switchPositions.current = null;
+  }, { scope: formRoot, dependencies: [register], revertOnUpdate: true });
   async function submit(e) {
     e.preventDefault();
     if (busy) return;
@@ -164,7 +184,7 @@ export function LoginPage({ navigate, onLogin, user }) {
   }
   return (
     <LoginShell navigate={navigate}>
-      <div className="login-form-wrap">
+      <div ref={formRoot} className={`login-form-wrap auth-mode-${register ? "register" : "login"}`}>
         {user ? (
           <>
             <div className="login-symbol">
@@ -185,21 +205,17 @@ export function LoginPage({ navigate, onLogin, user }) {
             <div className="login-symbol">
               <Sparkles size={24} />
             </div>
-            <h2>{register ? "创建你的账号" : "欢迎回到见数"}</h2>
-            <p className="login-description">
-              {register
-                ? "注册后，即可使用你的个人身份登录。"
-                : "登录账号，开始一次新的数据发现。"}
-            </p>
-            <div className="auth-tabs">
+            <div className="auth-copy-stack" data-auth-motion>
+              <div aria-hidden={register}><h2>欢迎回到见数</h2><p className="login-description">登录账号，开始一次新的数据发现。</p></div>
+              <div aria-hidden={!register}><h2>创建你的账号</h2><p className="login-description">注册后，即可使用你的个人身份登录。</p></div>
+            </div>
+            <div className="auth-tabs" data-auth-motion>
+              <span className="auth-tab-indicator" aria-hidden="true" />
               <button
                 type="button"
                 className={!register ? "selected" : ""}
                 aria-pressed={!register}
-                onClick={() => {
-                  setRegister(false);
-                  setError("");
-                }}
+                onClick={() => switchMode(false)}
               >
                 登录
               </button>
@@ -207,15 +223,12 @@ export function LoginPage({ navigate, onLogin, user }) {
                 type="button"
                 className={register ? "selected" : ""}
                 aria-pressed={register}
-                onClick={() => {
-                  setRegister(true);
-                  setError("");
-                }}
+                onClick={() => switchMode(true)}
               >
                 注册
               </button>
             </div>
-            <form onSubmit={submit}>
+            <form onSubmit={submit} data-auth-motion>
               <label className="auth-label" htmlFor="username">
                 用户名
               </label>
@@ -260,11 +273,11 @@ export function LoginPage({ navigate, onLogin, user }) {
                   {visible ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
-              {register && (
-                <p className="auth-hint">
+              <div className={`auth-hint-reveal ${register ? "is-open" : ""}`} aria-hidden={!register}>
+                <div><p className="auth-hint">
                   用户名 3–24 位，支持文字、数字、下划线和短横线。
-                </p>
-              )}
+                </p></div>
+              </div>
               {error && (
                 <p className="auth-error" role="alert">
                   {error}
@@ -276,11 +289,11 @@ export function LoginPage({ navigate, onLogin, user }) {
                 disabled={busy}
               >
                 {busy ? <LoaderCircle size={18} className="spin" /> : null}
-                {busy ? "正在处理…" : register ? "注册并登录" : "登录"}
+                <span className="auth-submit-label">{busy ? "正在处理…" : <><span aria-hidden={register}>登录</span><span aria-hidden={!register}>注册并登录</span></>}</span>
                 {!busy && <ArrowRight size={17} />}
               </button>
             </form>
-            <p className="auth-scope">
+            <p className="auth-scope" data-auth-motion>
               登录后，你的对话、表格和图表会保存到专属分析记录。
             </p>
           </>

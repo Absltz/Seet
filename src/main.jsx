@@ -7,4 +7,5 @@ import App from './App.jsx';
 import './style.css';
 import './pages.css';
 import './agent.css';
+import './workbench.css';
 createRoot(document.getElementById('root')).render(<React.StrictMode><App/></React.StrictMode>);

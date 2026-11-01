@@ -1,9 +1,24 @@
 import * as THREE from "three";
 import gsap from "gsap";
+import { createScenePainter } from "./sceneFrame.mjs";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { createExhibits, createAICore } from "./exhibitGeometry.mjs";
+import { arrivalFrame, arrivalFrustum } from "../arrivalMotion.mjs";
+import { workbenchOrbitFrame } from "../workbenchMotion.mjs";
+import {
+  orbitPose,
+  frontExhibit,
+  frontRightExhibit,
+  nextExhibit,
+  HOME_DWELL,
+  HOME_TRANSITION,
+  HOME_MODEL_SCALE,
+  carouselFrame,
+  sceneFramingScale as framingScale,
+} from "./exhibitMotion.mjs";
 let transferredScene = null;
 
-// Local, procedural geometry keeps the scene usable without remote model or texture files.
-export function createDataIsland(host, labels, { reduced, onFailure }) {
+export function createDataIsland(host, labels, { reduced, onFailure, coreOnly = false }) {
   if (host.closest(".home-hero") && transferredScene) {
     const existing = transferredScene;
     transferredScene = null;
@@ -13,361 +28,343 @@ export function createDataIsland(host, labels, { reduced, onFailure }) {
     }
     existing.cancel();
   }
-  const initialAngle = -0.22;
-  let transferring = false,
+  let disposed = false,
+    transferring = false,
     adopted = false,
     homeHost,
     homeLabels,
     expiry;
-  let disposed = false;
+  let mode = coreOnly ? "workspace" : host.closest(".login-visual") ? "login" : "home";
+  let active = 0,
+    phase = 0.55,
+    elapsed = 0,
+    homeClock = 0,
+    transitioning = false,
+    arrival = null;
   const renderer = new THREE.WebGLRenderer({
     alpha: true,
     antialias: true,
     powerPreference: "high-performance",
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  renderer.setClearColor(0, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.1;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.toneMappingExposure = 1.12;
   renderer.domElement.setAttribute("aria-hidden", "true");
   renderer.domElement.dataset.sceneId = crypto.randomUUID();
   host.appendChild(renderer.domElement);
-
   const scene = new THREE.Scene();
-  const camera = new THREE.OrthographicCamera(-5.2, 5.2, 4, -4, 0.1, 60);
+  const camera = new THREE.OrthographicCamera(-6, 6, 5, -5, 0.1, 80);
   camera.position.set(8, 7, 10);
-  camera.lookAt(0, 0.55, 0);
-  scene.add(new THREE.HemisphereLight(0xf6ffe9, 0x40594a, 2.0));
-  const sun = new THREE.DirectionalLight(0xfff5d7, 3.0);
+  camera.lookAt(0, 1.1, 0);
+  const painter = createScenePainter(() => renderer.render(scene, camera));
+  scene.add(new THREE.HemisphereLight(0xf8ffe7, 0x526b5a, 2));
+  const sun = new THREE.DirectionalLight(0xfff7dd, 3);
   sun.position.set(-3, 9, 6);
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(1024, 1024);
-  Object.assign(sun.shadow.camera, {
-    left: -6,
-    right: 6,
-    top: 6,
-    bottom: -6,
-    near: 0.5,
-    far: 25,
-  });
-  sun.shadow.bias = -0.001;
-  sun.shadow.normalBias = 0.035;
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xcbe8d2, 1.4);
+  const fill = new THREE.DirectionalLight(0xd8efdf, 1.5);
   fill.position.set(5, 4, -7);
   scene.add(fill);
-  const world = new THREE.Group();
-  world.rotation.y = initialAngle;
-  scene.add(world);
-
-  const mats = {};
-  for (const [name, color] of Object.entries({
-    ground: 0xa7bd8d,
-    edge: 0x385e41,
-    path: 0xd9dfc7,
-    ink: 0x285b3c,
-    green: 0x397954,
-    sage: 0x79a980,
-    light: 0xbad595,
-    lime: 0xd9eab0,
-    paper: 0xf4f4df,
-    pale: 0xe5ebd2,
-    gold: 0xbab172,
-    stem: 0x486346,
-  }))
-    mats[name] = new THREE.MeshStandardMaterial({
-      color,
-      roughness: 0.8,
-      metalness: 0.02,
-    });
-
-  function mesh(geometry, material, position, parent = world) {
-    const item = new THREE.Mesh(geometry, material);
-    item.position.set(...position);
-    item.castShadow = true;
-    item.receiveShadow = true;
-    parent.add(item);
-    return item;
+  const environment = new RoomEnvironment();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const envTarget = pmrem.fromScene(environment, 0.04);
+  scene.environment = envTarget.texture;
+  environment.dispose();
+  pmrem.dispose();
+  const exhibits = coreOnly ? [] : createExhibits();
+  exhibits.forEach((g) => scene.add(g));
+  const core = createAICore();
+  scene.add(core);
+  const coreLabel = core.children.find(object => object.isSprite);
+  const labelFront = camera.getWorldDirection(new THREE.Vector3()).negate().multiplyScalar(.8);
+  const labelInverse = new THREE.Quaternion();
+  // 标签也参加深度测试，位于模型背面时不会透过另一物体显示。
+  function faceCoreLabel() {
+    if (!coreLabel || !(mode === "workspace" || mode === "rendezvous")) return;
+    coreLabel.material.depthTest = true;
+    coreLabel.position.copy(labelFront).applyQuaternion(labelInverse.copy(core.quaternion).invert());
   }
-  function box(w, h, d, material, position, parent) {
-    return mesh(new THREE.BoxGeometry(w, h, d), material, position, parent);
-  }
-  mesh(
-    new THREE.CylinderGeometry(3.85, 3.85, 0.22, 72),
-    mats.edge,
-    [0, -0.2, 0],
-  );
-  mesh(
-    new THREE.CylinderGeometry(3.85, 3.85, 0.11, 72),
-    mats.ground,
-    [0, -0.035, 0],
-  );
-  const rim = mesh(
-    new THREE.TorusGeometry(3.69, 0.024, 6, 96),
-    mats.path,
-    [0, 0.03, 0],
-  );
-  rim.rotation.x = Math.PI / 2;
-  box(5.8, 0.026, 0.12, mats.path, [0, 0.032, 0.75]);
-  box(0.13, 0.025, 4.3, mats.path, [-0.65, 0.033, 0.15]);
-
-  // The seven heights use the same explicitly labelled coffee example as the home page.
-  const heights = [120, 150, 90, 180, 210, 280, 230];
-  const towers = heights.map((value, i) => {
-    const tower = new THREE.Group();
-    tower.position.set(-2.25 + i * 0.72, 0.04, -0.55);
-    world.add(tower);
-    const height = value / 104;
-    box(
-      0.49,
-      height,
-      0.68,
-      i === 5 ? mats.ink : i % 2 ? mats.green : mats.sage,
-      [0, height / 2, 0],
-      tower,
-    );
-    box(
-      0.51,
-      0.045,
-      0.7,
-      i === 5 ? mats.lime : mats.light,
-      [0, height + 0.022, 0],
-      tower,
-    );
-    box(
-      0.035,
-      height * 0.6,
-      0.015,
-      mats.light,
-      [0.17, height * 0.43, 0.348],
-      tower,
-    );
-    return tower;
-  });
-
-  // A small spreadsheet slab, a donut and an upright report form the data workflow.
-  const table = new THREE.Group();
-  table.position.set(-1.65, 0.15, 1.7);
-  table.rotation.y = -0.08;
-  world.add(table);
-  box(1.5, 0.13, 1.13, mats.paper, [0, 0, 0], table);
-  box(1.3, 0.025, 0.19, mats.ink, [0, 0.079, -0.35], table);
-  for (let row = 0; row < 3; row++)
-    for (let col = 0; col < 4; col++) {
-      box(
-        0.25,
-        0.026,
-        0.13,
-        (row + col) % 3 === 0 ? mats.green : mats.light,
-        [-0.48 + col * 0.32, 0.08, -0.09 + row * 0.21],
-        table,
-      );
-    }
-  const donut = new THREE.Group();
-  donut.position.set(0.1, 0.13, 1.9);
-  world.add(donut);
-  [mats.ink, mats.sage, mats.lime].forEach((material, i) => {
-    const part = mesh(
-      new THREE.TorusGeometry(0.46, 0.115, 8, 24, Math.PI * 0.64),
-      material,
-      [0, 0, 0],
-      donut,
-    );
-    part.rotation.set(Math.PI / 2, 0, (i * Math.PI * 2) / 3);
-  });
-  const report = new THREE.Group();
-  report.position.set(2.05, 0.96, 1.1);
-  report.rotation.set(-0.09, -0.26, -0.09);
-  world.add(report);
-  box(1.18, 1.65, 0.075, mats.paper, [0, 0, 0], report);
-  box(0.72, 0.08, 0.018, mats.ink, [-0.08, 0.6, 0.05], report);
-  box(0.47, 0.035, 0.018, mats.sage, [-0.2, 0.41, 0.05], report);
-  [0.22, 0.36, 0.29, 0.51, 0.62].forEach((height, i) =>
-    box(
-      0.12,
-      height,
-      0.025,
-      i === 4 ? mats.ink : mats.sage,
-      [-0.38 + i * 0.19, -0.37 + height / 2, 0.055],
-      report,
-    ),
-  );
-  box(0.8, 0.035, 0.018, mats.sage, [0, -0.53, 0.05], report);
-  box(0.52, 0.035, 0.018, mats.light, [-0.14, -0.65, 0.05], report);
-
-  // Faceted greenery gives the diorama a human scale without copying a campus scene.
-  for (let i = 0; i < 15; i++) {
-    const angle = -0.1 + (i / 14) * Math.PI * 1.2;
-    const x = Math.cos(angle) * 3.3,
-      z = Math.sin(angle) * 3.3;
-    if (z > 1 && x > 0.5) continue;
-    const height = 0.33 + (i % 3) * 0.07;
-    mesh(new THREE.CylinderGeometry(0.035, 0.045, height, 5), mats.stem, [
-      x,
-      height / 2,
-      z,
-    ]);
-    mesh(
-      new THREE.IcosahedronGeometry(0.23 + (i % 2) * 0.03, 1),
-      i % 3 ? mats.green : mats.light,
-      [x, height + 0.12, z],
-    );
-  }
-  const satellite = new THREE.Group();
-  satellite.position.set(-2.1, 2.65, 0.85);
-  satellite.rotation.set(0.2, 0.3, 0.15);
-  world.add(satellite);
-  mesh(new THREE.IcosahedronGeometry(0.24, 0), mats.gold, [0, 0, 0], satellite);
-  const orbit = mesh(
-    new THREE.TorusGeometry(0.36, 0.015, 5, 40),
-    mats.lime,
-    [0, 0, 0],
-    satellite,
-  );
-  orbit.rotation.x = 0.65;
-
-  const anchors = [
-    [labels[0], table, new THREE.Vector3(0, 0.35, 0)],
-    [labels[1], towers[5], new THREE.Vector3(0, 2.95, 0)],
-    [labels[2], report, new THREE.Vector3(0, 1.05, 0)],
-  ];
   let width = 1,
     height = 1,
-    frame = 0,
-    visible = true,
-    paused = reduced;
-  let lastTime = 0,
-    elapsed = 0;
-  // Measure every mesh and label through a full turn, in camera space. The
-  // camera then fits the envelope at each viewport ratio instead of cropping
-  // tall bars in a wide, short login canvas.
-  camera.updateMatrixWorld(true);
-  const envelope = {
-    minX: Infinity,
-    maxX: -Infinity,
-    minY: Infinity,
-    maxY: -Infinity,
-  };
-  const viewPoint = new THREE.Vector3();
-  const nodes = [];
-  world.traverse((object) => {
-    if (!object.isMesh) return;
-    // Use actual vertices: a cylinder's box corners would overestimate the
-    // circular island and unnecessarily shrink the scene.
-    const positions = object.geometry.attributes.position;
-    const corners = [];
-    for (let index = 0; index < positions.count; index++)
-      corners.push(new THREE.Vector3().fromBufferAttribute(positions, index));
-    nodes.push({ object, corners });
-  });
-  function include(point) {
-    point.applyMatrix4(camera.matrixWorldInverse);
-    envelope.minX = Math.min(envelope.minX, point.x);
-    envelope.maxX = Math.max(envelope.maxX, point.x);
-    envelope.minY = Math.min(envelope.minY, point.y);
-    envelope.maxY = Math.max(envelope.maxY, point.y);
+    ticking = false,
+    visible = true;
+  const animations = new Set();
+  function animate(target, vars) {
+    let tween;
+    tween = gsap.to(target, {
+      ...vars,
+      onUpdate: () => {
+        vars.onUpdate?.();
+        render();
+      },
+      onComplete: () => {
+        animations.delete(tween);
+        vars.onComplete?.();
+      },
+    });
+    animations.add(tween);
+    return tween;
   }
-  for (let step = 0; step < 48; step++) {
-    world.rotation.y = (step * Math.PI) / 24;
-    world.updateMatrixWorld(true);
-    for (const { object, corners } of nodes)
-      for (const point of corners)
-        include(viewPoint.copy(point).applyMatrix4(object.matrixWorld));
-    for (const [, object, offset] of anchors)
-      include(object.localToWorld(viewPoint.copy(offset)));
-  }
-  world.rotation.y = initialAngle;
-  // Leave room for the entrance translation and the subtle floating elements.
-  envelope.minY -= 0.25;
-  envelope.maxY += 0.12;
-  const projection = new THREE.Vector3();
-  function render() {
-    if (disposed) return;
-    renderer.render(scene, camera);
-    for (const [index, [, object, offset]] of anchors.entries()) {
-      const label = labels[index];
-      if (!label) continue;
-      projection.copy(offset);
-      object.localToWorld(projection);
-      projection.project(camera);
-      label.style.transform = `translate(${((projection.x + 1) * width) / 2}px,${((-projection.y + 1) * height) / 2}px) translate(-50%,-100%)`;
-    }
-  }
-  function tick(now) {
-    frame = 0;
-    if (disposed || paused || !visible || document.hidden) return;
-    // 每个可见的浏览器动画帧都绘制，避免 30fps 限速及阈值抖动造成跳帧。
-    elapsed += Math.min((now - lastTime) / 1000, 0.05);
-    lastTime = now;
-    // Smoothly reach a constant orbital speed (one revolution in ~35s).
-    // Rotation is time-based and never reads mouse or touch input.
-    world.rotation.y =
-      initialAngle + 0.18 * (elapsed - 1.2 * (1 - Math.exp(-elapsed / 1.2)));
-    satellite.position.y = 2.65 + Math.sin(elapsed * 0.8) * 0.08;
-    satellite.rotation.y = elapsed * 0.15;
-    report.position.y = 0.96 + Math.sin(elapsed * 0.6) * 0.025;
-    render();
-    frame = requestAnimationFrame(tick);
-  }
-  function schedule() {
-    if (!frame && !paused && visible && !document.hidden) {
-      lastTime = performance.now();
-      frame = requestAnimationFrame(tick);
-    }
-  }
-  function framingScale(width, height) {
-    const padding = Math.min(30, Math.min(width, height) * 0.08);
-    return Math.max(
-      ((envelope.maxX - envelope.minX) * 1.04) /
-        Math.max(1, width - padding * 2),
-      ((envelope.maxY - envelope.minY) * 1.04) /
-        Math.max(1, height - padding * 2),
+  function emit() {
+    renderer.domElement.dataset.exhibit = String(active);
+    renderer.domElement.dataset.mode = mode;
+    host.dispatchEvent(
+      new CustomEvent("seet-scene-state", { detail: { index: active, mode } }),
     );
+  }
+  function orbitLayout() {
+    exhibits.forEach((group, i) => {
+      const p = orbitPose(i, phase);
+      group.position.set(p.x, p.y, p.z);
+      group.scale.setScalar(0.56);
+      group.rotation.y = 0.55 + Math.sin(phase * 0.6 + i) * 0.18;
+    });
+    active = frontRightExhibit(phase);
+    renderer.domElement.dataset.arrivalExhibit = String(active);
+    renderer.domElement.dataset.frontExhibit = String(frontExhibit(phase));
+  }
+  function homeLayout() {
+    core.visible = false;
+    exhibits.forEach((group, i) => {
+      group.visible = i === active;
+      group.position.set(0, 1.1, 0);
+      group.scale.setScalar(HOME_MODEL_SCALE);
+      group.rotation.y = -0.25;
+    });
+    emit();
+  }
+  function materialsOf(group) {
+    const result = new Set();
+    group.traverse((o) => {
+      if (o.material)
+        for (const m of Array.isArray(o.material) ? o.material : [o.material])
+          result.add(m);
+    });
+    return result;
+  }
+  // Each exhibit owns its materials so crossfades never change another model's opacity.
+  exhibits.forEach((group) => {
+    const clones = new Map();
+    group.traverse((object) => {
+      if (!object.material) return;
+      if (!clones.has(object.material))
+        clones.set(object.material, object.material.clone());
+      object.material = clones.get(object.material);
+      object.material.transparent = true;
+    });
+  });
+  function fade(group, opacity, duration) {
+    materialsOf(group).forEach((material) =>
+      animate(material, { opacity, duration, ease: "sine.inOut" }),
+    );
+  }
+  function enterHome(sourceRect) {
+    active = frontRightExhibit(phase);
+    renderer.domElement.dataset.capturedExhibit = String(active);
+    const selected = exhibits[active];
+    const unitsPerPixel = frameScale(width, height);
+    const projected = selected.position.clone().project(camera);
+    const depth = new THREE.Vector3(0, 1.1, 0).project(camera).z;
+    arrival = {
+      unitsPerPixel,
+      center: { x: sourceRect.left + width / 2, y: sourceRect.top + height / 2 },
+      start: {
+        x: sourceRect.left + ((projected.x + 1) * width) / 2,
+        y: sourceRect.top + ((1 - projected.y) * height) / 2,
+      },
+      startScale: selected.scale.x,
+      depth,
+      path: null,
+    };
+    mode = "home";
+    homeClock = 0;
+    transitioning = true;
+    emit();
+    animate(core.scale, {
+      x: 0.001,
+      y: 0.001,
+      z: 0.001,
+      duration: 0.65,
+      ease: "power2.in",
+      onComplete: () => {
+        core.visible = false;
+      },
+    });
+    exhibits.forEach((group, i) => {
+      // The selected model is driven only by the shared flight progress.
+      if (i !== active) {
+        fade(group, 0, 0.55);
+        animate(group.scale, {
+          x: 0.2,
+          y: 0.2,
+          z: 0.2,
+          duration: 0.65,
+          ease: "power2.in",
+          onComplete: () => {
+            group.visible = false;
+          },
+        });
+      }
+    });
+  }
+  const arrivalPosition = new THREE.Vector3();
+  function applyArrival(progress) {
+    if (!arrival?.path) return;
+    const selected = exhibits[active];
+    const pose = arrivalFrame(progress, arrival.path);
+    arrivalPosition.set((pose.x / width) * 2 - 1, 1 - (pose.y / height) * 2, arrival.depth).unproject(camera);
+    selected.position.copy(arrivalPosition);
+    selected.scale.setScalar(pose.scale);
+    // 飞行时保留同一朝向，形状不因转向改变宽度；落位后继续自转。
+    render();
+    return pose;
+  }
+
+  function cycle() {
+    if (transitioning || disposed) return;
+    transitioning = true;
+    const outgoing = exhibits[active];
+    active = nextExhibit(active);
+    const incoming = exhibits[active];
+    const oldYaw = outgoing.rotation.y;
+    const oldMaterials = materialsOf(outgoing),
+      newMaterials = materialsOf(incoming);
+    incoming.visible = true;
+    incoming.position.set(0, 1.1, 0);
+    incoming.rotation.set(0, -0.45, 0);
+    const progress = { value: 0 };
+    const update = () => {
+      const pose = carouselFrame(progress.value);
+      outgoing.scale.setScalar(Math.max(0.001, pose.outScale));
+      incoming.scale.setScalar(Math.max(0.001, pose.inScale));
+      outgoing.rotation.y = oldYaw + progress.value * 0.15;
+      incoming.rotation.y = -0.45 + pose.incoming * 0.2;
+      oldMaterials.forEach((m) => (m.opacity = pose.outOpacity));
+      newMaterials.forEach((m) => (m.opacity = pose.inOpacity));
+    };
+    update();
+    emit();
+    animate(progress, {
+      value: 1,
+      duration: HOME_TRANSITION,
+      ease: "none",
+      onUpdate: update,
+      onComplete: () => {
+        outgoing.visible = false;
+        incoming.scale.setScalar(HOME_MODEL_SCALE);
+        transitioning = false;
+        homeClock = 0;
+      },
+    });
+  }
+  if (mode === "login") orbitLayout();
+  else if (mode === "home") homeLayout();
+  const frameScale = (w, h) => mode === "workspace" ? 3.3 / Math.max(1, Math.min(w, h)) : framingScale(w, h) / (mode === "login" ? 1.12 : 1);
+  function render() {
+    // 正常动效由同一个 GSAP 时钟在更新所有姿态后绘制，避免隔帧追赶。
+    if (!disposed && !ticking) painter.request();
   }
   function resize() {
     width = host.clientWidth;
     height = host.clientHeight;
     if (!width || !height) return;
-    const scale = framingScale(width, height);
-    const centerX = (envelope.minX + envelope.maxX) / 2,
-      centerY = (envelope.minY + envelope.maxY) / 2;
-    camera.left = centerX - (scale * width) / 2;
-    camera.right = centerX + (scale * width) / 2;
-    camera.top = centerY + (scale * height) / 2;
-    camera.bottom = centerY - (scale * height) / 2;
+    // Bound the backing buffer when the enlarged login canvas extends past the screen.
+    renderer.setPixelRatio(
+      Math.min(
+        devicePixelRatio || 1,
+        1.5,
+        Math.sqrt(3200000 / (width * height)),
+      ),
+    );
+    Object.assign(camera, arrivalFrustum(
+      width, height,
+      arrival?.unitsPerPixel ?? frameScale(width, height),
+      arrival?.center,
+    ));
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
-    render();
+    faceCoreLabel();
+    painter.drawNow();
+  }
+  function tick(_time, deltaTime) {
+    if (disposed || reduced || !visible || document.hidden) return;
+    const dt = Math.min(deltaTime / 1000, 0.05);
+    elapsed += dt;
+    if (mode === "login") {
+      phase += dt * 0.22;
+      orbitLayout();
+      core.rotation.y += dt * 0.18;
+      core.position.y = 1.1 + Math.sin(elapsed * 0.9) * 0.07;
+    } else if (mode === "workspace") {
+      core.rotation.y += dt * .55;
+      core.rotation.z = Math.sin(elapsed * .65) * .09;
+    } else if (mode === "rendezvous") {
+      core.rotation.y += dt * .65;
+    } else if (!transitioning) {
+      exhibits[active].rotation.y += dt * 0.14;
+      homeClock += dt;
+      if (homeClock >= HOME_DWELL) cycle();
+    }
+    // GSAP 的 tween 更新先完成，再提交这一帧，画布和动画进度不再差一帧。
+    faceCoreLabel();
+    painter.drawNow();
+  }
+  function schedule() {
+    if (!ticking && !reduced && visible && !document.hidden) {
+      ticking = true;
+      gsap.ticker.add(tick);
+    }
+  }
+  function stop() {
+    gsap.ticker.remove(tick);
+    ticking = false;
   }
   const resizeObserver = new ResizeObserver(resize);
   resizeObserver.observe(host);
-  const intersection = new IntersectionObserver(([entry]) => {
+  const intersection = new IntersectionObserver((entries) => {
+    const entry = entries.find(item => item.target === host);
+    if (!entry) return;
     visible = entry.isIntersecting;
+    animations.forEach((tween) => tween.paused(!visible || document.hidden));
     if (!visible) {
-      cancelAnimationFrame(frame);
-      frame = 0;
+      stop();
     } else schedule();
   });
   intersection.observe(host);
   function visibility() {
+    animations.forEach((t) => t.paused(document.hidden || !visible));
     if (document.hidden) {
-      cancelAnimationFrame(frame);
-      frame = 0;
+      stop();
     } else schedule();
   }
+  document.addEventListener("visibilitychange", visibility);
   function lost(event) {
     event.preventDefault();
-    cancelAnimationFrame(frame);
-    frame = 0;
-    paused = true;
+    stop();
     onFailure();
   }
   renderer.domElement.addEventListener("webglcontextlost", lost);
+  function rehost(nextHost, nextLabels) {
+    host.removeEventListener("seet-capture", capture);
+    host.removeEventListener("seet-workbench-capture", captureWorkbench);
+    resizeObserver.unobserve(host);
+    intersection.unobserve(host);
+    host = nextHost;
+    labels = nextLabels;
+    host.appendChild(renderer.domElement);
+    host.addEventListener("seet-capture", capture);
+    host.addEventListener("seet-workbench-capture", captureWorkbench);
+    resizeObserver.observe(host);
+    intersection.observe(host);
+    resize();
+    emit();
+  }
   function capture(event) {
-    if (disposed || paused || !event.detail.host) return;
+    if (disposed || reduced || !event.detail.host) return;
+    // Freeze the orbital instant at authentication success, not at a later React render.
+    orbitLayout();
+    enterHome(event.detail.sourceRect);
     transferring = true;
     transferredScene = api;
     rehost(event.detail.host, []);
@@ -376,36 +373,86 @@ export function createDataIsland(host, labels, { reduced, onFailure }) {
       if (!adopted) api.cancel();
     }, 5000);
   }
-  host.addEventListener("seet-capture", capture);
-  document.addEventListener("visibilitychange", visibility);
-  resize();
-  const context = gsap.context(() => {
-    if (!reduced) {
-      gsap
-        .timeline({ onUpdate: render, defaults: { ease: "power3.out" } })
-        .from(world.position, { y: -0.25, duration: 1.4 }, 0)
-        .from(world.scale, { x: 0.85, y: 0.85, z: 0.85, duration: 1.4 }, 0)
-        .from(
-          towers.map((t) => t.scale),
-          { y: 0.01, duration: 1.1, stagger: 0.08 },
-          0.15,
-        );
-    }
-  });
-  schedule();
-  function rehost(nextHost, nextLabels) {
-    host.removeEventListener("seet-capture", capture);
-    resizeObserver.unobserve(host);
-    intersection.unobserve(host);
-    host = nextHost;
-    labels = nextLabels;
-    host.appendChild(renderer.domElement);
-    host.addEventListener("seet-capture", capture);
-    resizeObserver.observe(host);
-    intersection.observe(host);
-    resize();
+  let workspaceMotion = null;
+  const projectedCore = new THREE.Vector3();
+  function screenPosition(object, point) {
+    projectedCore.set(point.x / width * 2 - 1, 1 - point.y / height * 2, workspaceMotion.depth).unproject(camera);
+    // 屏幕内的椭圆和沿视线的纵深构成一个真正的三维圆周。
+    projectedCore.addScaledVector(viewFront, (point.depth || 0) * arrival.unitsPerPixel);
+    object.position.copy(projectedCore);
   }
+  const viewFront = camera.getWorldDirection(new THREE.Vector3()).negate();
+  function captureWorkbench(event) {
+    if (disposed || reduced || mode !== "home") return;
+    animations.forEach(tween => tween.kill());
+    animations.clear();
+    // 允许在轮播中途点击：交接当前体积最大的可见模型，保持原有大小。
+    active = exhibits.reduce((best, group, i) => group.visible && group.scale.x > exhibits[best].scale.x ? i : best, active);
+    exhibits.forEach((group, i) => {
+      if (i !== active && group.visible) fade(group, 0, .14);
+    });
+    const sourceRect = event.detail.sourceRect;
+    const unitsPerPixel = framingScale(width, height);
+    const projected = exhibits[active].position.clone().project(camera);
+    const origin = { x: sourceRect.left + (projected.x + 1) * width / 2, y: sourceRect.top + (1 - projected.y) * height / 2 };
+    const startScale = .85;
+    core.scale.setScalar(startScale);
+    const sphere = new THREE.Sphere();
+    const exhibitRadius = new THREE.Box3().setFromObject(exhibits[active]).getBoundingSphere(sphere).radius / unitsPerPixel;
+    const coreRadius = new THREE.Box3().setFromObject(core).getBoundingSphere(sphere).radius / unitsPerPixel;
+    workspaceMotion = {
+      origin, end: origin, depth: projected.z,
+      exhibitRadius, coreRadius, gap: 36,
+      startScale, endScale: startScale,
+      exhibitScale: exhibits[active].scale.x,
+      exhibitMaterials: [...materialsOf(exhibits[active])].map(material => ({ material, opacity: material.opacity })),
+      coreMaterials: [...materialsOf(core)],
+    };
+    workspaceMotion.coreMaterials.forEach(material => { material.transparent = true; material.opacity = 0; });
+    arrival = { unitsPerPixel, center: { x: sourceRect.left + width / 2, y: sourceRect.top + height / 2 } };
+    core.visible = true;
+    mode = "rendezvous";
+    transferring = true;
+    adopted = false;
+    transitioning = true;
+    rehost(event.detail.host, []);
+    event.detail.runtime = api;
+  }
+  host.addEventListener("seet-capture", capture);
+  host.addEventListener("seet-workbench-capture", captureWorkbench);
+  resize();
+  schedule();
   const api = {
+    workspaceFrame(progress) {
+      if (!workspaceMotion) return;
+      const pose = workbenchOrbitFrame(progress, workspaceMotion);
+      screenPosition(core, pose.core);
+      screenPosition(exhibits[active], pose.exhibit);
+      core.scale.setScalar(pose.coreScale);
+      workspaceMotion.coreMaterials.forEach(material => { material.opacity = pose.appearance; });
+      exhibits[active].scale.setScalar(Math.max(.00001, workspaceMotion.exhibitScale * pose.exhibitScale));
+      exhibits[active].visible = pose.exhibitScale > .001;
+      workspaceMotion.exhibitMaterials.forEach(({ material, opacity }) => { material.opacity = opacity * pose.exhibitOpacity; });
+      faceCoreLabel();
+      render();
+      return pose.reveal;
+    },
+    configureCoreDestination(destination) {
+      if (!workspaceMotion) return;
+      workspaceMotion.end = { x: destination.left + destination.width / 2, y: destination.top + destination.height / 2 };
+      workspaceMotion.endScale = arrival.unitsPerPixel / (3.3 / Math.min(destination.width, destination.height));
+    },
+    finishCore(nextHost) {
+      if (disposed) return;
+      arrival = null;
+      workspaceMotion = null;
+      mode = "workspace";
+      exhibits.forEach(group => { group.visible = false; });
+      core.position.set(0, 1.1, 0);
+      core.scale.setScalar(1);
+      transferring = false;
+      rehost(nextHost, []);
+    },
     adopt(nextHost, nextLabels, failure) {
       adopted = true;
       clearTimeout(expiry);
@@ -413,15 +460,28 @@ export function createDataIsland(host, labels, { reduced, onFailure }) {
       homeLabels = nextLabels;
       onFailure = failure;
     },
-    transferScale(rect) {
-      return (
-        framingScale(width, height) / framingScale(rect.width, rect.height)
-      );
+    arrivalFrame: applyArrival,
+    configureArrival(destination) {
+      if (!arrival) return;
+      arrival.path = {
+        start: arrival.start,
+        end: { x: destination.left + destination.width / 2, y: destination.top + destination.height / 2 },
+        viewport: { width, height },
+        startScale: arrival.startScale,
+        endScale: HOME_MODEL_SCALE * arrival.unitsPerPixel / framingScale(destination.width, destination.height),
+      };
+      applyArrival(0);
     },
     finish(nextHost, nextLabels) {
       if (disposed) return;
+      applyArrival(1);
+      exhibits[active].position.set(0, 1.1, 0);
+      exhibits[active].scale.setScalar(HOME_MODEL_SCALE);
+      arrival = null;
       rehost(homeHost || nextHost, homeLabels || nextLabels);
       transferring = false;
+      transitioning = false;
+      homeClock = 0;
     },
     cancel() {
       transferring = false;
@@ -429,25 +489,36 @@ export function createDataIsland(host, labels, { reduced, onFailure }) {
       api.dispose();
     },
     dispose() {
-      // Login unmounts while this renderer moves; ownership then passes to Home.
       if (disposed || (transferring && !adopted)) return;
       disposed = true;
+      painter.dispose();
       clearTimeout(expiry);
       host.removeEventListener("seet-capture", capture);
-      cancelAnimationFrame(frame);
-      context.revert();
+      host.removeEventListener("seet-workbench-capture", captureWorkbench);
+      stop();
+      animations.forEach((t) => t.kill());
+      animations.clear();
       resizeObserver.disconnect();
       intersection.disconnect();
       document.removeEventListener("visibilitychange", visibility);
       renderer.domElement.removeEventListener("webglcontextlost", lost);
       const geometries = new Set(),
-        materials = new Set();
-      scene.traverse((object) => {
-        if (object.geometry) geometries.add(object.geometry);
-        if (object.material) materials.add(object.material);
+        materials = new Set(),
+        textures = new Set();
+      scene.traverse((o) => {
+        if (o.geometry) geometries.add(o.geometry);
+        if (o.material)
+          for (const m of Array.isArray(o.material)
+            ? o.material
+            : [o.material]) {
+            materials.add(m);
+            if (m.map) textures.add(m.map);
+          }
       });
-      geometries.forEach((geometry) => geometry.dispose());
-      materials.forEach((material) => material.dispose());
+      geometries.forEach((g) => g.dispose());
+      materials.forEach((m) => m.dispose());
+      textures.forEach((t) => t.dispose());
+      envTarget.dispose();
       renderer.dispose();
       renderer.forceContextLoss();
       renderer.domElement.remove();
