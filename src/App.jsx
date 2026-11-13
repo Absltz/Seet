@@ -1307,11 +1307,6 @@ export default function App() {
                                 ? "构成分析"
                                 : "分类对比"}
                           </h2>
-                          <p className="subtle">
-                            {dataset.rows.length} 行原始数据 →{" "}
-                            {analyzed.rows.length} 组结果{chartSelection.selection ? `（图表保留 ${chartData.rows.length} 组背景）` : ''}，按
-                            {sort ? "数值降序" : "原始顺序"}展示
-                          </p>
                         </div>
                         <div className="chart-type" aria-label="图表类型">
                           {[

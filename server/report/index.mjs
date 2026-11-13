@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { prepareReportBundle } from "./snapshot.mjs";
-import { reportFailureMessage } from "./narrative.mjs";
 import { composeReport } from "./compose.mjs";
 import { renderReportPdf } from "./pdf.mjs";
 import {textModel} from '../provider.mjs';
-export function reportRouter() {
+export function reportRouter({ compose = composeReport, renderPdf = renderReportPdf, aiTimeoutMs = 150000 } = {}) {
   const router = Router();
   let active = 0;
   router.post("/", async (req, res) => {
@@ -12,17 +11,21 @@ export function reportRouter() {
       return res.status(409).json({ error: "账号已改变，请刷新后重试。" });
     if (active >= 2)
       return res.status(429).json({ error: "报告正在生成，请稍后重试。" });
-    let bundle;
+    let bundle, statistical = req.body?.allowStatistical === true;
     try {
       bundle = prepareReportBundle(req.body);
-    } catch (error) {
-      return res
-        .status(error.code === "history_too_long" ? 413 : 400)
-        .json({ ...(error.code === "history_too_long" ? { code: error.code } : {}), error: error.code === "history_too_long" ? error.message : "请先确认有效数据、指标及筛选条件。" });
+    } catch {
+      // 用户问题或当前视图不可用时，仍可核算有效原始数据的整体统计。
+      try {
+        bundle = prepareReportBundle({ ...req.body, view: undefined, history: [], questionHistory: [] });
+        statistical = true;
+      } catch {
+        return res.status(400).json({ error: "请先确认有效数据、指标及筛选条件。" });
+      }
     }
     active++;
-    const controller = new AbortController(),
-      timer = setTimeout(() => controller.abort(), 300000);
+    const controller = new AbortController(), aiController = new AbortController();
+    const timer = setTimeout(() => aiController.abort(new DOMException("报告分析超时", "TimeoutError")), aiTimeoutMs);
     res.on("close", () => {
       if (!res.writableEnded) controller.abort();
     });
@@ -39,33 +42,50 @@ export function reportRouter() {
       emit({
         type: "progress",
         stage: 1,
-        text: process.env.AI_API_KEY && req.body.allowStatistical !== true
+        text: process.env.AI_API_KEY && !statistical
           ? "千问 正在撰写分析解读"
           : "正在整理统计解读",
       });
-      const { snapshot, narrative } = await composeReport(bundle, {
-        statistical: req.body.allowStatistical === true,
-        signal: controller.signal,
-        onFailure: failure => {
-          console.warn("[report]", JSON.stringify({ recordId: typeof req.body.recordId === "string" ? req.body.recordId.slice(0, 64) : undefined, scope: failure.scope, kind: failure.kind, reason: failure.reason, violation: failure.violation, unsupportedTokenCount: failure.tokens?.length, attempt: failure.attempt }));
-        },
-        onProgress: text => emit({ type: "progress", stage: 1, text }),
-        onModel: event => emit(event),
-      });
-      if (controller.signal.aborted) return;
-      if ((narrative.mode !== "ai" || narrative.questionSection && narrative.questionSection.mode !== "ai") && req.body.allowStatistical !== true) {
-        emit({ type: "error", code: narrative.failureCode, error: reportFailureMessage(narrative.failureCode, narrative.failureModel || narrative.model) });
-        return;
+      const build = async (useStatistics) => {
+        controller.signal.throwIfAborted();
+        const source = useStatistics ? structuredClone(bundle) : bundle;
+        const { snapshot, narrative } = await compose(source, {
+          statistical: useStatistics,
+          signal: useStatistics ? controller.signal : AbortSignal.any([controller.signal, aiController.signal]),
+          onFailure: failure => {
+            console.warn("[report]", JSON.stringify({ recordId: typeof req.body.recordId === "string" ? req.body.recordId.slice(0, 64) : undefined, scope: failure.scope, kind: failure.kind, reason: failure.kind === "ZodError" ? "invalid-report-structure" : failure.reason, violation: failure.violation, fields: failure.fields, unsupportedTokenCount: failure.tokens?.length, attempt: failure.attempt }));
+          },
+          onProgress: text => emit({ type: "progress", stage: 1, text }),
+          onModel: event => emit(event),
+        });
+        controller.signal.throwIfAborted();
+        if (!useStatistics && (aiController.signal.aborted || narrative.mode !== "ai" || narrative.questionSection && narrative.questionSection.mode !== "ai")) {
+          throw new Error(narrative.failureCode || "report-incomplete");
+        }
+        emit({
+          type: "progress", stage: 2,
+          text: narrative.mode === "ai" ? "AI 解读已完成，正在排版 PDF" : "正在将统计解读排版为 PDF",
+        });
+        const pdf = await renderPdf(snapshot, narrative);
+        if (!pdf?.bytes?.length || pdf.bytes.subarray(0, 5).toString() !== "%PDF-" || !(pdf.pages > 0)) throw new Error("invalid-report-pdf");
+        return { snapshot, narrative, pdf };
+      };
+      // 保留统计快照，避免模型查询规划原地改变专题后污染重试。
+      const statisticalBundle = structuredClone(bundle);
+      let generated;
+      try {
+        generated = await build(statistical);
+      } catch (error) {
+        if (controller.signal.aborted || res.destroyed) return;
+        if (statistical) throw error;
+        clearTimeout(timer);
+        aiController.abort();
+        bundle = statisticalBundle;
+        statistical = true;
+        emit({ type: "progress", stage: 2, text: "正在整理统计结果与图表，准备报告预览" });
+        generated = await build(true);
       }
-      emit({
-        type: "progress",
-        stage: 2,
-        text:
-          narrative.mode === "ai"
-            ? "AI 解读已完成，正在排版 PDF"
-            : "正在将统计解读排版为 PDF",
-      });
-      const pdf = await renderReportPdf(snapshot, narrative);
+      const { snapshot, narrative, pdf } = generated;
       if (controller.signal.aborted) return;
       emit({
         type: "result",
@@ -97,6 +117,7 @@ export function reportRouter() {
     } finally {
       active--;
       clearTimeout(timer);
+      aiController.abort();
       res.end();
     }
   });

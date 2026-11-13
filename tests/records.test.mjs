@@ -84,8 +84,8 @@ test("authenticated records are durable and isolated across accounts", async (t)
   const id = "11111111-1111-4111-8111-111111111111";
   const reportResponse = await req("/api/report", "POST", { ...workspace, owner: "records_a" }, a);
   const reportEvents = (await reportResponse.text()).trim().split("\n").map(line => JSON.parse(line));
-  assert.ok(reportEvents.some(e => e.type === "error" && e.error.includes("千问")));
-  assert.ok(!reportEvents.some(e => e.type === "result"));
+  assert.ok(!reportEvents.some(e => e.type === "error"));
+  assert.equal(reportEvents.find(e => e.type === "result")?.result.mode, "rules");
   const statistical = await req("/api/report", "POST", { ...workspace, owner: "records_a", allowStatistical: true }, a);
   const statisticalEvents = (await statistical.text()).trim().split("\n").map(line => JSON.parse(line));
   const reportResult = statisticalEvents.find(e => e.type === "result")?.result;

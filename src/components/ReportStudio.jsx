@@ -266,7 +266,6 @@ export default function ReportStudio({ input, onClose, initialResult, onResult, 
           </div>
           <h1>{statistical ? "正在生成统计报告" : "正在生成 AI 分析报告"}</h1>
           <p>{progress.text}</p>
-          {input.history?.some(m => m.role === "user") && <p className="report-focus-question">本次关注：{input.history.filter(m => m.role === "user").at(-1).text.slice(0, 160)}</p>}
           <ol>
             {["核对数据、对话与分析问题", statistical ? "整理统计结果与图表" : "千问 深度思考与撰写专题", "复核图表、排版与 PDF 预览"].map(
               (label, index) => (
