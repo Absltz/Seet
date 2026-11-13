@@ -1,4 +1,5 @@
 import { Router } from "express";
+import {asrModel,asrBaseUrl,nativeQwenAsr,textBaseUrl} from './provider.mjs';
 function speechError(message, status = 422) {
   const error = new Error(message);
   error.status = status;
@@ -21,50 +22,35 @@ function validateAudio(audio) {
 }
 export async function transcribeAudio(audio, signal) {
   validateAudio(audio);
+  const native=nativeQwenAsr(),model=asrModel();
+  const messages=[{role:'user',content:[{type:'input_audio',input_audio:{data:audio,...(native?{}:{format:'wav'})}}]}];
   const response = await fetch(
-    (process.env.AI_BASE_URL || "https://api.xiaomimimo.com/v1").replace(
-      /\/$/,
-      "",
-    ) + "/chat/completions",
+    native?asrBaseUrl()+'/services/aigc/multimodal-generation/generation':textBaseUrl()+'/chat/completions',
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.AI_API_KEY}`,
+        ...(native?{'X-DashScope-SSE':'disable'}:{}),
       },
       signal: signal || AbortSignal.timeout(45000),
-      body: JSON.stringify({
-        model: process.env.AI_ASR_MODEL || "mimo-v2.5-asr",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_audio",
-                input_audio: { data: audio, format: "wav" },
-              },
-            ],
-          },
-        ],
-        asr_options: { language: "auto" },
-        stream: false,
-      }),
+      body: JSON.stringify(native?{model,input:{messages},parameters:{format:'wav',sample_rate:'16000'}}:{model,messages,asr_options:{language:'auto'},stream:false}),
     },
   );
   if (!response.ok)
     throw speechError(
       {
-        401: "MiMo 密钥认证失败。",
-        402: "MiMo 语音识别额度不足。",
+        401: "千问密钥认证失败。",
+        402: "千问语音识别额度不足。",
         403: "当前密钥没有语音识别模型权限。",
         404: "当前服务不支持语音识别模型。",
         429: "语音请求过于频繁或额度达到限制，请稍后重试。",
-      }[response.status] || "MiMo 语音识别暂不可用，请稍后重试。",
+      }[response.status] || "千问语音识别暂不可用，请稍后重试。",
       response.status >= 500 ? 502 : response.status,
     );
   const body = await response.json(),
     choice = body.choices?.[0],
-    text = choice?.message?.content;
+    text = native ? body.output?.sentence?.text ?? body.output?.text : choice?.message?.content;
   if (choice?.finish_reason === "length")
     throw speechError("录音识别结果被截断，请分段录制。");
   if (typeof text !== "string" || !text.trim())
@@ -72,7 +58,7 @@ export async function transcribeAudio(audio, signal) {
   if (text.length > 12000) throw speechError("识别文字过长，请分段录制。");
   return {
     text: text.trim(),
-    model: process.env.AI_ASR_MODEL || "mimo-v2.5-asr",
+    model,
   };
 }
 export function speechRouter() {
@@ -82,7 +68,7 @@ export function speechRouter() {
     if (req.body?.owner && req.body.owner !== req.user.username)
       return res.status(409).json({ error: "登录账号已改变，请刷新后重试。" });
     if (!process.env.AI_API_KEY)
-      return res.status(503).json({ error: "MiMo 语音服务尚未配置。" });
+      return res.status(503).json({ error: "千问语音服务尚未配置。" });
     if (active >= 2)
       return res
         .status(429)
@@ -104,7 +90,7 @@ export function speechRouter() {
               ? error.message
               : controller.signal.aborted
                 ? "语音识别超时，请重试。"
-                : "无法连接 MiMo 语音服务，请检查网络。",
+                : "无法连接千问语音服务，请检查网络。",
           });
     } finally {
       clearTimeout(timer);

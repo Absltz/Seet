@@ -1,27 +1,11 @@
-import { useState } from "react";
 import { FileText, ArrowUpRight, Trash2 } from "lucide-react";
-export default function AnalysisHistory({ records, busy, onOpen }) {
-  const [pending, setPending] = useState(null),
-    [deleted, setDeleted] = useState(null);
+export default function AnalysisHistory({ records, busy, onOpen, onDelete }) {
   return (
-    <main className="history-page">
+    <main className={`history-page${records.records.length ? "" : " history-page-empty"}`}>
       <div className="records-page-heading">
         <h1>分析记录</h1>
         <p>{records.records.length} 条记录，保存在当前账号</p>
       </div>
-      {deleted && (
-        <div className="record-deleted-notice" role="status">
-          <span>已删除“{deleted.title}”</span>
-          <button
-            disabled={records.loading}
-            onClick={async () => {
-              if (await records.restoreRecord(deleted.id)) setDeleted(null);
-            }}
-          >
-            撤销删除
-          </button>
-        </div>
-      )}
       <section className="records-page-list" aria-label="已保存的分析记录">
         <div className="records-column-heading" aria-hidden="true">
           <span>分析名称</span>
@@ -57,46 +41,25 @@ export default function AnalysisHistory({ records, busy, onOpen }) {
                 <ArrowUpRight size={17} />
               </button>
               <div className="record-row-actions">
-                {pending?.id === record.id ? (
-                  <>
-                    <button
-                      className="cancel-row-delete"
-                      disabled={records.loading}
-                      onClick={() => setPending(null)}
-                    >
-                      取消
-                    </button>
-                    <button
-                      className="confirm-row-delete"
-                      disabled={busy || records.loading}
-                      onClick={async () => {
-                        if (await records.deleteRecord(record.id)) {
-                          setDeleted(record);
-                          setPending(null);
-                        }
-                      }}
-                    >
-                      确认删除
-                    </button>
-                  </>
-                ) : (
                   <button
                     className="record-delete-button"
                     aria-label={"删除分析：" + record.title}
-                    title="删除记录"
+                    title="删除记录及关联内容"
                     disabled={busy || records.loading}
-                    onClick={() => setPending(record)}
+                    onClick={() => onDelete(record)}
                   >
                     <Trash2 size={17} />
                   </button>
-                )}
               </div>
             </div>
           ))
         ) : (
           <div className="records-page-empty">
             <FileText size={30} />
-            <p>还没有分析记录，添加数据后会自动保存在这里。</p>
+            <div>
+              <h2>还没有分析记录</h2>
+              <p>添加数据后，分析会自动保存，方便下次继续。</p>
+            </div>
           </div>
         )}
       </section>

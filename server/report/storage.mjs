@@ -3,7 +3,14 @@ import { z } from "zod";
 const text = max => z.string().max(max);
 const evidence = z.array(text(80)).max(128).default([]);
 const mode = z.enum(["ai", "rules"]);
+const questionCoverage = z.object({
+  totalMessages: z.number().int().min(0), processedMessages: z.number().int().min(0),
+  totalCharacters: z.number().int().min(0), processedCharacters: z.number().int().min(0),
+  truncated: z.boolean(), note: text(1500),
+});
 const narrativeSection = z.object({
+  model: text(150).optional(), models: z.array(text(150)).max(8).optional(),
+  focus: text(600).optional(), questionCoverage: questionCoverage.optional(),
   mode, notice: text(1500), summary: text(3000), answer: text(6000),
   findings: z.array(z.object({ headline: text(200), explanation: text(3000), evidence, chartIds: z.array(text(30)).max(10).optional() })).max(12),
   chapters: z.array(z.object({ title: text(200), analysis: text(6000), chartId: text(30), evidence })).max(12),
@@ -19,7 +26,7 @@ const schema = z.object({
     createdAt: z.string().datetime(), fileName: text(300),
     pages: z.number().int().min(1).max(200),
     chartCount: z.number().int().min(0).max(12),
-    model: text(150), questions: z.array(text(1200)).max(6), narrative,
+    model: text(150), models: z.array(text(150)).max(8).optional(), questions: z.array(text(12000)).refine(values => values.reduce((sum, value) => sum + value.length, 0) <= 2000000), narrative,
   }),
 });
 export function validateStoredReport(value) {

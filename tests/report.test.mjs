@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { samples } from "../src/data.mjs";
+import { samples } from "./fixtures/datasets.mjs";
 
 test("report snapshot uses the current metric, filters and aggregate, preserving input", async () => {
   const { prepareReport } = await import("../server/report/snapshot.mjs");
@@ -115,10 +115,10 @@ test("report narrative uses validated evidence, and falls back honestly if MiMo 
   const questionNarrative = await generateNarrative({ ...snapshot, reportScope: "question" });
   assert.equal(questionNarrative.mode, "ai");
   assert.equal(questionNarrative.chapters.length, 2);
-  const latestOnly = await generateNarrative({ ...snapshot, reportScope: "question", questions: ["旧的其他家庭问题", "当前五户占比问题"], history: [{ role: "user", text: "旧的其他家庭问题" }, { role: "user", text: "当前五户占比问题" }] });
-  assert.equal(latestOnly.mode, "ai");
-  assert.deepEqual(JSON.parse(lastRequest.messages[1].content).questions, ["当前五户占比问题"]);
-  assert.ok(!lastRequest.messages[1].content.includes("旧的其他家庭问题"));
+  const allQuestions = await generateNarrative({ ...snapshot, reportScope: "question", questions: ["旧的其他家庭问题", "当前五户占比问题"], history: [{ role: "user", text: "旧的其他家庭问题" }, { role: "user", text: "当前五户占比问题" }] });
+  assert.equal(allQuestions.mode, "ai");
+  assert.deepEqual(JSON.parse(lastRequest.messages[1].content).questions, ["旧的其他家庭问题", "当前五户占比问题"]);
+  assert.ok(lastRequest.messages[1].content.includes("旧的其他家庭问题"));
   partialChapters = true;
   const validSubset = await generateNarrative(snapshot);
   assert.equal(validSubset.mode, "ai");

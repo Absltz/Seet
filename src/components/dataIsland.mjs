@@ -88,7 +88,9 @@ export function createDataIsland(host, labels, { reduced, onFailure, coreOnly = 
   let width = 1,
     height = 1,
     ticking = false,
-    visible = true;
+    visible = true,
+    suspended = false,
+    contextLost = false;
   const animations = new Set();
   function animate(target, vars) {
     let tween;
@@ -263,9 +265,10 @@ export function createDataIsland(host, labels, { reduced, onFailure, coreOnly = 
   const frameScale = (w, h) => mode === "workspace" ? 3.3 / Math.max(1, Math.min(w, h)) : framingScale(w, h) / (mode === "login" ? 1.12 : 1);
   function render() {
     // 正常动效由同一个 GSAP 时钟在更新所有姿态后绘制，避免隔帧追赶。
-    if (!disposed && !ticking) painter.request();
+    if (!disposed && !contextLost && !suspended && !ticking) painter.request();
   }
   function resize() {
+    if (suspended || disposed || contextLost) return;
     width = host.clientWidth;
     height = host.clientHeight;
     if (!width || !height) return;
@@ -288,7 +291,7 @@ export function createDataIsland(host, labels, { reduced, onFailure, coreOnly = 
     painter.drawNow();
   }
   function tick(_time, deltaTime) {
-    if (disposed || reduced || !visible || document.hidden) return;
+    if (disposed || contextLost || suspended || reduced || !visible || document.hidden) return;
     const dt = Math.min(deltaTime / 1000, 0.05);
     elapsed += dt;
     if (mode === "login") {
@@ -311,7 +314,7 @@ export function createDataIsland(host, labels, { reduced, onFailure, coreOnly = 
     painter.drawNow();
   }
   function schedule() {
-    if (!ticking && !reduced && visible && !document.hidden) {
+    if (!disposed && !contextLost && !suspended && !ticking && !reduced && visible && !document.hidden) {
       ticking = true;
       gsap.ticker.add(tick);
     }
@@ -341,6 +344,7 @@ export function createDataIsland(host, labels, { reduced, onFailure, coreOnly = 
   document.addEventListener("visibilitychange", visibility);
   function lost(event) {
     event.preventDefault();
+    contextLost = true;
     stop();
     onFailure();
   }
@@ -423,6 +427,26 @@ export function createDataIsland(host, labels, { reduced, onFailure, coreOnly = 
   resize();
   schedule();
   const api = {
+    isCoreAvailable() { return !disposed && !contextLost; },
+    attachCore(nextHost, options) {
+      if (disposed) throw new Error('三维场景已释放');
+      reduced = options.reduced;
+      onFailure = options.onFailure;
+      // 公转交接期间也可能丢失上下文，将故障通知给新挂载的标题兜底。
+      if (contextLost) { stop(); onFailure?.(); return; }
+      suspended = false;
+      visible = true;
+      if (host !== nextHost) rehost(nextHost, []);
+      else { resizeObserver.observe(host); intersection.observe(host); resize(); }
+      if (reduced) stop();
+      else schedule();
+    },
+    suspendCore() {
+      suspended = true;
+      stop();
+      resizeObserver.unobserve(host);
+      intersection.unobserve(host);
+    },
     workspaceFrame(progress) {
       if (!workspaceMotion) return;
       const pose = workbenchOrbitFrame(progress, workspaceMotion);

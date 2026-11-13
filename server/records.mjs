@@ -3,9 +3,11 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { validateDataset } from "../src/data.mjs";
+import { validateDataset, projectMetadata } from "../src/data.mjs";
 import { validateView } from "../src/analysis.mjs";
 import { validateStoredReport } from "./report/storage.mjs";
+import {questionHistoryFor} from '../src/conversationHistory.mjs';
+import { withAssetLock, assertAssetLive, createAssetLifecycle } from './assetLifecycle.mjs';
 
 function validateWorkspace(value) {
   if (!value || !Array.isArray(value.messages) || value.messages.length > 100)
@@ -43,6 +45,13 @@ function validateWorkspace(value) {
       : [];
     return { role: m.role, text: m.text, ...(trace.length ? { trace } : {}) };
   });
+  if (value.source != null && (typeof value.source !== 'object' || Array.isArray(value.source) || !value.source.sheetId && !value.source.projectId))
+    throw new Error('invalid workspace source');
+  const source = value.source ? {
+    ...(value.source.sheetId ? {sheetId:projectMetadata({projectId:value.source.sheetId}).projectId} : {}),
+    ...projectMetadata(value.source),
+    title:String(value.source.title || '原始数据').slice(0,80),
+  } : null;
   return {
     dataset: dataset(value.dataset),
     draft: dataset(value.draft),
@@ -51,12 +60,14 @@ function validateWorkspace(value) {
         ? validateView(value.draft || value.dataset, value.view)
         : null,
     messages,
+    questionHistory:questionHistoryFor({...value,messages}),
     chart: ["bar", "line", "pie"].includes(value.chart) ? value.chart : "bar",
     metricKey:
       typeof value.metricKey === "string" ? value.metricKey.slice(0, 40) : "",
     tab: ["chart", "data", "report"].includes(value.tab) ? value.tab : "chart",
     sort: value.sort === true,
     report: validateStoredReport(value.report),
+    source,
   };
 }
 export function recordsRouter() {
@@ -94,7 +105,7 @@ export function recordsRouter() {
   }
   router.get("/", async (req, res) => {
     try {
-      const records = await read(fileFor(req.user));
+      const records = await withAssetLock(req.user,()=>read(fileFor(req.user)));
       res.json({
         records: records
           .filter((r) => !r.deletedAt)
@@ -114,7 +125,7 @@ export function recordsRouter() {
   });
   router.get("/:id", async (req, res) => {
     try {
-      const record = (await read(fileFor(req.user))).find(
+      const record = (await withAssetLock(req.user,()=>read(fileFor(req.user)))).find(
         (r) => r.id === req.params.id,
       );
       if (!record || record.deletedAt)
@@ -132,7 +143,7 @@ export function recordsRouter() {
     const file = fileFor(req.user);
     const operation = (queues.get(file) || Promise.resolve())
       .catch(() => {})
-      .then(async () => {
+      .then(() => withAssetLock(req.user,async () => {
         const records = await read(file),
           record = records.find((r) => r.id === req.params.id);
         if (!record || (!restore && record.deletedAt)) {
@@ -140,6 +151,7 @@ export function recordsRouter() {
           e.status = 404;
           throw e;
         }
+        if (restore && record.deletedBy)throw Object.assign(new Error('请从关联删除提示中撤销，以恢复整组内容。'),{status:409});
         if (restore) delete record.deletedAt;
         else record.deletedAt = new Date().toISOString();
         await writeFile(file + ".tmp", JSON.stringify(records), {
@@ -147,7 +159,7 @@ export function recordsRouter() {
         });
         await rename(file + ".tmp", file);
         return { id: record.id, title: record.title };
-      });
+      }));
     queues.set(
       file,
       operation.catch(() => {}),
@@ -160,7 +172,11 @@ export function recordsRouter() {
         .json({ error: e.status ? e.message : "记录操作失败，请重试。" });
     }
   }
-  router.delete("/:id", (req, res) => changeVisibility(req, res, false));
+  router.delete('/:id', async (req,res) => {
+    if (req.body?.owner && req.body.owner !== req.user.username) return res.status(409).json({error:'登录账号已改变，请刷新后重试。'});
+    try {res.json(await createAssetLifecycle().remove(req.user,'analysis',req.params.id,req.body?.token));}
+    catch(error){res.status(error.status||500).json({error:error.status?error.message:'关联删除失败，请重试。'});}
+  });
   router.post("/:id/restore", (req, res) => changeVisibility(req, res, true));
   router.put("/:id", async (req, res) => {
     if (req.body?.owner && req.body.owner !== req.user.username)
@@ -180,7 +196,8 @@ export function recordsRouter() {
     const file = fileFor(req.user);
     const operation = (queues.get(file) || Promise.resolve())
       .catch(() => {})
-      .then(async () => {
+      .then(() => withAssetLock(req.user,async () => {
+        await assertAssetLive(req.user,workspace.dataset||workspace.draft||workspace.source,'analyses',req.params.id);
         const records = await read(file),
           index = records.findIndex((r) => r.id === req.params.id);
         if (index >= 0 && records[index].deletedAt) {
@@ -213,7 +230,7 @@ export function recordsRouter() {
         });
         await rename(file + ".tmp", file);
         return record;
-      });
+      }));
     queues.set(
       file,
       operation.catch(() => {}),
@@ -226,8 +243,8 @@ export function recordsRouter() {
         title: record.title,
       });
     } catch (e) {
-      res.status(e.limit || e.deleted ? 409 : 500).json({
-        error: e.deleted
+      res.status(e.status || (e.limit || e.deleted ? 409 : 500)).json({
+        error: e.status ? e.message : e.deleted
           ? "这条记录已删除，请新建分析或撤销删除。"
           : e.limit
             ? "当前账号已达到 200 条分析记录上限。"

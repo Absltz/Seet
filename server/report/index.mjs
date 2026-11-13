@@ -3,6 +3,7 @@ import { prepareReportBundle } from "./snapshot.mjs";
 import { reportFailureMessage } from "./narrative.mjs";
 import { composeReport } from "./compose.mjs";
 import { renderReportPdf } from "./pdf.mjs";
+import {textModel} from '../provider.mjs';
 export function reportRouter() {
   const router = Router();
   let active = 0;
@@ -14,10 +15,10 @@ export function reportRouter() {
     let bundle;
     try {
       bundle = prepareReportBundle(req.body);
-    } catch {
+    } catch (error) {
       return res
-        .status(400)
-        .json({ error: "请先确认有效数据、指标及筛选条件。" });
+        .status(error.code === "history_too_long" ? 413 : 400)
+        .json({ ...(error.code === "history_too_long" ? { code: error.code } : {}), error: error.code === "history_too_long" ? error.message : "请先确认有效数据、指标及筛选条件。" });
     }
     active++;
     const controller = new AbortController(),
@@ -39,7 +40,7 @@ export function reportRouter() {
         type: "progress",
         stage: 1,
         text: process.env.AI_API_KEY && req.body.allowStatistical !== true
-          ? "MiMo 正在撰写分析解读"
+          ? "千问 正在撰写分析解读"
           : "正在整理统计解读",
       });
       const { snapshot, narrative } = await composeReport(bundle, {
@@ -49,10 +50,11 @@ export function reportRouter() {
           console.warn("[report]", JSON.stringify({ recordId: typeof req.body.recordId === "string" ? req.body.recordId.slice(0, 64) : undefined, scope: failure.scope, kind: failure.kind, reason: failure.reason, violation: failure.violation, unsupportedTokenCount: failure.tokens?.length, attempt: failure.attempt }));
         },
         onProgress: text => emit({ type: "progress", stage: 1, text }),
+        onModel: event => emit(event),
       });
       if (controller.signal.aborted) return;
       if ((narrative.mode !== "ai" || narrative.questionSection && narrative.questionSection.mode !== "ai") && req.body.allowStatistical !== true) {
-        emit({ type: "error", code: narrative.failureCode, error: reportFailureMessage(narrative.failureCode) });
+        emit({ type: "error", code: narrative.failureCode, error: reportFailureMessage(narrative.failureCode, narrative.failureModel || narrative.model) });
         return;
       }
       emit({
@@ -77,8 +79,9 @@ export function reportRouter() {
           notice: narrative.notice,
           createdAt: snapshot.createdAt,
           narrative,
-          questions: bundle.question?.questions || [],
-          model: process.env.AI_MODEL || "mimo-v2.6-flash",
+          questions: snapshot.questionSection?.questions || [],
+          model: narrative.mode==='ai' ? narrative.model || textModel() : '程序统计',
+          models: narrative.models || [],
           chartCount: narrative.chapters.length + Math.min(2, narrative.questionSection?.chapters.length || 0),
           fileName:
             snapshot.title.replace(/[\\/:*?"<>|]/g, "_") + "-分析报告.pdf",

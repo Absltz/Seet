@@ -4,9 +4,16 @@ import { fileURLToPath } from "node:url";
 import { authRouter } from "./auth.mjs";
 import { ready, runAI } from "./ai.mjs";
 import { recordsRouter } from "./records.mjs";
+import { libraryRouter } from "./library.mjs";
 import { runAgent } from "./agent.mjs";
 import { speechRouter } from './speech.mjs';
 import { reportRouter } from './report/index.mjs';
+import { providerName, asrModel, textModel, textModels } from './provider.mjs';
+import { importRouter } from './importRoute.mjs';
+import { sheetsRouter } from './sheets.mjs';
+import { assetLifecycleRouter } from './assetLifecycle.mjs';
+import {collectionRouter} from './collection.mjs';
+import {aiFailure} from './aiFailure.mjs';
 
 dotenv.config({
   path: fileURLToPath(new URL("../.env", import.meta.url)),
@@ -14,7 +21,7 @@ dotenv.config({
 });
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "40mb" }));
 app.use("/api", (req, res, next) => {
   res.set("Cache-Control", "no-store");
   const origin = req.headers.origin;
@@ -35,12 +42,20 @@ app.use("/api", (req, res, next) => {
 const auth = authRouter();
 app.use("/api/auth", auth);
 app.use("/api/analyses", auth.requireAuth, recordsRouter());
+app.use("/api/library", auth.requireAuth, libraryRouter());
 app.use('/api/speech',auth.requireAuth,speechRouter());
 app.use('/api/report',auth.requireAuth,reportRouter());
+app.use('/api/import',auth.requireAuth,importRouter());
+app.use('/api/sheets',auth.requireAuth,sheetsRouter());
+app.use('/api/assets',auth.requireAuth,assetLifecycleRouter());
+app.use('/api/collection',auth.requireAuth,collectionRouter());
 app.get("/api/status", (_, res) =>
   res.json({
     configured: ready(),
-    model: ready() ? process.env.AI_MODEL : null,
+    model: ready() ? textModel() : null,
+    models: textModels(),
+    provider: providerName(),
+    asrModel: asrModel(),
   }),
 );
 let active = 0;
@@ -58,7 +73,7 @@ app.post("/api/agent", auth.requireAuth, async (req, res) => {
     return res.status(429).json({ error: "AI 正在处理其他请求，请稍后重试。" });
   active++;
   const controller = new AbortController(),
-    timeout = setTimeout(() => controller.abort(), 90000);
+    timeout = setTimeout(() => controller.abort(), 180000);
   res.on("close", () => {
     if (!res.writableEnded) controller.abort();
   });
@@ -75,18 +90,9 @@ app.post("/api/agent", auth.requireAuth, async (req, res) => {
     const result = await runAgent(req.body, emit, controller.signal);
     emit({ type: "result", result });
   } catch (e) {
-    const status = e.statusCode || e.status;
     emit({
       type: "error",
-      error:
-        {
-          401: "MiMo 密钥认证失败。",
-          402: "MiMo 账户额度不足。",
-          429: "MiMo 请求频率或额度达到限制。",
-        }[status] ||
-        (controller.signal.aborted
-          ? "任务已停止或超时，可重试。"
-          : "Agent 调用失败，请检查网络后重试。"),
+      ...aiFailure(e,{aborted:controller.signal.aborted,fallback:'AI 分析调用未完成，请稍后重试；当前数据已保留。'}),
     });
   } finally {
     active--;
@@ -119,7 +125,7 @@ app.post(["/api/extract", "/api/chat"], auth.requireAuth, async (req, res) => {
       error: error.public
         ? error.message
         : error.name === "TimeoutError"
-          ? "MiMo 响应超时，请稍后重试。"
+          ? "千问 响应超时，请稍后重试。"
           : "AI 连接或数据整理失败，请检查网络后重试，或简化数据描述。",
     });
   } finally {
@@ -128,7 +134,7 @@ app.post(["/api/extract", "/api/chat"], auth.requireAuth, async (req, res) => {
 });
 const dist = fileURLToPath(new URL("../dist", import.meta.url));
 app.use(express.static(dist));
-app.get(["/", "/home", "/help", "/login", "/history"], (_, res) =>
+app.get(["/", "/home", "/help", "/login", "/history", "/datasets", "/boards", "/reports", "/sheets"], (_, res) =>
   res.sendFile(dist + "/index.html"),
 );
 app.use((err, req, res, next) =>

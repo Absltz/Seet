@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, lazy, Suspense } from "react";
+import { useSidebarMotion } from "./useSidebarMotion.jsx";
+import { useChartSelection } from './useChartSelection.jsx';
+import ChartSelectionBar from './components/ChartSelectionBar.jsx';
+import './chart-selection.css';
 import {
   ArrowUp,
   ArrowUpRight,
@@ -29,17 +33,20 @@ import {
   Link2,
   AudioLines,
   Square,
+  LayoutDashboard,
 } from "lucide-react";
 import Papa from "papaparse";
-import Markdown from "react-markdown";
+import AssistantReply from './components/AssistantReply.jsx';
 import {
   fromMatrix,
   validateDataset,
   summarize,
   csvExport,
-  samples,
 } from "./data.mjs";
-import { apiRequest, agentRequest } from "./api.mjs";
+import { apiRequest, agentRequest, importRequest } from "./api.mjs";
+import { tableFromMatrix, tableFromDataset, validateRawTable } from './rawTable.mjs';
+import ImportReviewPanel from './components/ImportReviewPanel.jsx';
+import { metricHeadline } from './metricHeadline.mjs';
 import {
   buildView,
   filterSource,
@@ -52,14 +59,21 @@ import { HomePage } from "./Experience.jsx";
 import { usePageMotion } from "./usePageMotion.jsx";
 import { useRecords, emptyWorkspace } from "./useRecords.jsx";
 import { useVoiceInput } from "./useVoiceInput.jsx";
-import AnalysisHistory from "./components/AnalysisHistory.jsx";
+import {captureSourceFile} from './sheets/sourceFile.mjs';
+import { useAssetDeletion } from './components/AssetDeletion.jsx';
 import ReportStudio from "./components/ReportStudio.jsx";
 import { format } from "./format.mjs";
 import { reportKeyFor, serializeReport, restoreReport } from "./reportState.mjs";
+import {questionHistoryFor} from './conversationHistory.mjs';
 const ChartView = lazy(() => import("./components/ChartView.jsx"));
+const LibraryPages = lazy(() => import("./library/LibraryPages.jsx"));
+const CollectionPage = lazy(() => import('./library/CollectionPage.jsx'));
+const SpreadsheetPage = lazy(() => import('./sheets/SpreadsheetPage.jsx'));
+const TrashPage = lazy(() => import('./components/TrashPage.jsx'));
 import DataTable from "./components/DataTable.jsx";
 import ChartBoundary from "./components/ChartBoundary.jsx";
 import WorkbenchSurface, { AICore } from "./components/WorkbenchSurface.jsx";
+import WorkspaceNav from "./components/WorkspaceNav.jsx";
 
 const clubText =
   "摄影社报名80人、到场62人；篮球社报名120人、到场108人；读书会报名50人、到场45人。";
@@ -85,7 +99,12 @@ function Logo() {
   );
 }
 export default function App() {
+  const {requestDeletion} = useAssetDeletion();
+  const [assetRevision, setAssetRevision] = useState(0);
   const [dataset, setDataset] = useState(null);
+  const [workspaceSource, setWorkspaceSource] = useState(null);
+  const [pendingImport, setPendingImport] = useState(null);
+  const [sheetIncoming, setSheetIncoming] = useState(null);
   const [reportInput, setReportInput] = useState(null);
   const [storedReport, setStoredReport] = useState(null);
   const reportCache = useMemo(() => restoreReport(storedReport), [storedReport]);
@@ -105,15 +124,23 @@ export default function App() {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
-  const [examples, setExamples] = useState(false),
-    [sidebar, setSidebar] = useState(true);
   const [page, setPage] = useState(location.pathname),
     [user, setUser] = useState(null);
+  const workspaceRoot = useRef(null);
+  const [sidebar, setSidebar] = useSidebarMotion(workspaceRoot, page);
   const leaveHome = usePageMotion(page);
   const [authPending, setAuthPending] = useState(true);
   const [previous, setPrevious] = useState(null);
+  const [assetBusy, setAssetBusy] = useState(false);
+  const ownerRef = useRef(user?.username);
+  ownerRef.current = user?.username;
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('seet:owner-change', {detail:{owner:user?.username}}));
+    setSheetIncoming(null);
+    setPendingImport(null);
+  }, [user?.username]);
   const [aiState, setAIState] = useState("checking"),
-    [model, setModel] = useState("mimo-v2.6-flash"),
+    [model, setModel] = useState("qwen3.8-flash"),
     [lastRequest, setLastRequest] = useState("");
   const [messages, setMessages] = useState([
     {
@@ -121,15 +148,22 @@ export default function App() {
       text: "你好，我是见数。给我一段带数字的话，或一份数据文件，我们一起看看其中的规律。",
     },
   ]);
+  const [questionHistory,setQuestionHistory]=useState([]);
   const inputRef = useRef(null),
     fileRef = useRef(null),
     chatEnd = useRef(null),
     version = useRef(0);
+  const replyPresentations = useRef(new WeakMap());
+  const followConversation = useRef(true);
+  const scrollConversation = useCallback(() => {
+    const box = chatEnd.current?.parentElement;
+    if (box && followConversation.current) box.scrollTop = box.scrollHeight;
+  }, []);
   async function checkAI() {
     setAIState("checking");
     try {
       const r = await apiRequest("/api/status");
-      setModel(r.model || "mimo-v2.6-flash");
+      setModel(r.model || "qwen3.8-flash");
       setAIState(r.configured ? "ready" : "unconfigured");
     } catch {
       setAIState("offline");
@@ -152,6 +186,12 @@ export default function App() {
     }
   }, [authPending, user, page]);
   useEffect(() => {
+    if (page === '/history') {
+      history.replaceState(null, '', '/datasets');
+      setPage('/datasets');
+    }
+  }, [page]);
+  useEffect(() => {
     const expired = () => {
       version.current++;
       setUser(null);
@@ -164,7 +204,12 @@ export default function App() {
   }, []);
   useEffect(() => {
     document.title =
-      page === "/history"
+      page === "/datasets" ? "数据集库 · 见数"
+      : page === "/sheets" ? "数据表格 · 见数"
+      : page === "/boards" ? "分析看板 · 见数"
+      : page === "/reports" ? "报告中心 · 见数"
+      : page === "/trash" ? "回收站 · 见数"
+      : page === "/history"
         ? "分析记录 · 见数"
         : page === "/help"
           ? "使用说明 · 见数"
@@ -181,9 +226,8 @@ export default function App() {
     history.replaceState(null, "", u);
   }, [tab, page]);
   useEffect(() => {
-    const box = chatEnd.current?.parentElement;
-    if (box) box.scrollTop = box.scrollHeight;
-  }, [messages, busy, page, agentStatus, agentSteps]);
+    scrollConversation();
+  }, [messages, busy, page, agentStatus, agentSteps, scrollConversation]);
   function navigate(target) {
     const commit = () => {
       if (location.pathname !== target) history.pushState(null, "", target);
@@ -211,9 +255,11 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [notice]);
+  const chartSelection = useChartSelection(dataset, view, setView);
+  const chartInteraction = { ...chartSelection, disabled: busy || editing };
   const analyzed = useMemo(
-    () => (dataset ? buildView(dataset, view || defaultView(dataset)) : null),
-    [dataset, view],
+    () => (dataset ? chartSelection.selection ? buildView(dataset, view || defaultView(dataset)) : chartSelection.contextData : null),
+    [dataset, view, chartSelection.selection, chartSelection.contextData],
   );
   const filteredSource = useMemo(
     () => dataset ? filterSource(dataset, view || defaultView(dataset)) : null,
@@ -225,33 +271,51 @@ export default function App() {
     () => (analyzed && metric ? summarize(analyzed, metric.key) : null),
     [analyzed, metric],
   );
-  const displayed = useMemo(
+  const headline = useMemo(() => stats && metric ? metricHeadline(dataset,view,metric.key,stats) : null,[dataset,view,metric,stats]);
+  const chartData = useMemo(
     () =>
-      analyzed
+      chartSelection.contextData
         ? {
-            ...analyzed,
+            ...chartSelection.contextData,
             rows: sort
-              ? [...analyzed.rows].sort(
+              ? [...chartSelection.contextData.rows].sort(
                   (a, b) =>
                     (b[metric.key] ?? -Infinity) - (a[metric.key] ?? -Infinity),
                 )
-              : analyzed.rows,
+              : chartSelection.contextData.rows,
           }
         : null,
-    [analyzed, metric, sort],
+    [chartSelection.contextData, chartSelection.dimension?.type, metric, sort],
   );
-  const say = (value) =>
-    setMessages((m) => [...m, { role: "assistant", text: value }].slice(-100));
+  const displayed = useMemo(() => analyzed ? {
+    ...analyzed,
+    rows: sort ? [...analyzed.rows].sort((a, b) => (b[metric.key] ?? -Infinity) - (a[metric.key] ?? -Infinity)) : analyzed.rows,
+  } : null, [analyzed, metric, sort]);
+  const say = (value, {animate = false, trace} = {}) => {
+    const message = {role: 'assistant', text: value, ...(trace?.length ? {trace} : {})};
+    if (animate) replyPresentations.current.set(message, {id: crypto.randomUUID(), started: false});
+    setMessages(items => [...items, message].slice(-100));
+  };
+  const presentationFor = message => {
+    if (!replyPresentations.current.has(message)) {
+      replyPresentations.current.set(message, {id: crypto.randomUUID(), started: true});
+    }
+    return replyPresentations.current.get(message);
+  };
   function restoreWorkspace(state) {
+    followConversation.current = true;
     agentAbort.current?.abort();
     setAgentSteps([]);
     setAgentStatus("");
     version.current++;
     setBusy(false);
+    setPendingImport(null);
+    setWorkspaceSource(state.source || null);
     setDataset(state.dataset);
     setView(state.view || null);
     setDraft(state.draft);
     setMessages(state.messages);
+    setQuestionHistory(questionHistoryFor(state));
     setChart(state.chart);
     setSort(state.sort);
     setMetricKey(state.metricKey);
@@ -262,18 +326,43 @@ export default function App() {
     setLastRequest("");
     setPrevious(null);
     setStoredReport(state.report || null);
+    if (!state.dataset && !state.draft && state.source?.sheetId) {
+      const token = version.current, owner = ownerRef.current;
+      apiRequest('/api/sheets/' + state.source.sheetId, undefined, {headers:{'X-Workspace-Owner':encodeURIComponent(owner)}}).then(({item}) => {
+        if (token === version.current && owner === ownerRef.current) {
+          setPendingImport({table:item.table,sheetId:item.id,rawAlreadySaved:true,awaiting:true,startedAt:Date.now()});
+        }
+      }).catch(error => { if (token === version.current) setNotice(error.message); });
+    }
   }
   const snapshot = useMemo(
-    () => ({ dataset, draft, messages, chart, sort, metricKey, tab, view, report: storedReport }),
-    [dataset, draft, messages, chart, sort, metricKey, tab, view, storedReport],
+    () => ({ dataset, draft, messages, questionHistory, chart, sort, metricKey, tab, view, report: storedReport, source:workspaceSource }),
+    [dataset, draft, messages, questionHistory, chart, sort, metricKey, tab, view, storedReport, workspaceSource],
   );
   const records = useRecords(user, snapshot, restoreWorkspace);
-  useEffect(() => { setReportInput(null); }, [user?.username, records.activeId]);
-  const reportKey = useMemo(() => reportKeyFor({ dataset, view, metricKey, chart, sort, messages }), [dataset, view, metricKey, chart, sort, messages]);
+  useEffect(() => {
+    const changed = event => {
+      const result = event.detail;
+      if (result.owner !== ownerRef.current) return;
+      setSheetIncoming(null);
+      setReportInput(null);
+      setAssetRevision(value => value + 1);
+      if (result.action === 'delete' && (result.projectIds.includes(pendingImport?.table?.projectId) || result.items.sheets.some(item => item.id === pendingImport?.sheetId))) {
+        version.current++;
+        agentAbort.current?.abort();
+        setPendingImport(null);
+        setBusy(false);
+      }
+    };
+    window.addEventListener('seet:assets-changed', changed);
+    return () => window.removeEventListener('seet:assets-changed', changed);
+  }, [pendingImport]);
+  useEffect(() => { setReportInput(null); setSheetIncoming(null); }, [user?.username, records.activeId]);
+  const reportKey = useMemo(() => reportKeyFor({ dataset, view, metricKey, chart, sort, messages, questionHistory }), [dataset, view, metricKey, chart, sort, messages, questionHistory]);
   const currentReport = reportCache?.key === reportKey ? reportCache.result : null;
   const savedReport = reportCache?.result;
   function openReport(force = false, previewSaved = false) {
-    if (!dataset || draft || editing || busy) return;
+    if (!dataset || draft || editing || busy || pendingImport) return;
     setReportInput({
       dataset: structuredClone(dataset),
       view: structuredClone(view),
@@ -281,7 +370,8 @@ export default function App() {
       chart,
       sort,
       owner: user.username,
-      history: messages.slice(-12).map(m => ({ role: m.role, text: m.text })),
+      history: questionHistory.map(text => ({role:'user',text})),
+      questionHistory:[...questionHistory],
       key: reportKey,
       recordId: records.activeId,
       cachedResult: force ? null : previewSaved ? savedReport : currentReport,
@@ -289,6 +379,67 @@ export default function App() {
     });
   }
   function generateReport() { openReport(); }
+  async function openAssets(target) {
+    if (busy || assetBusy || editing || records.loading) return;
+    try { await records.saveNow(); navigate(target); }
+    catch (e) { setNotice(e.message); }
+  }
+  async function openCollectionItem(item, target) {
+    if (busy || assetBusy || editing || records.loading) return;
+    const owner = user.username;
+    setAssetBusy(true);
+    try {
+      await records.saveNow();
+      const opened = await apiRequest('/api/collection/open', {owner,kind:item.kind,id:item.id,analysisId:item.analysisId || undefined,target});
+      if (ownerRef.current !== owner) return;
+      if (!await records.openRecord(opened.recordId)) throw new Error('对应分析未能打开，请重新尝试。');
+      if (ownerRef.current === owner) navigate(target === 'source' ? '/sheets' : '/');
+    } finally { if (ownerRef.current === owner) setAssetBusy(false); }
+  }
+  async function pinChart() {
+    if (!dataset || draft || busy || assetBusy || editing || !metric || pendingImport) return;
+    const owner = user.username;
+    setAssetBusy(true);
+    try {
+      const headers = { "X-Workspace-Owner": encodeURIComponent(owner) };
+      const { items, revision } = await apiRequest("/api/library/board", undefined, { headers });
+      if (ownerRef.current !== owner) return;
+      if (items.length >= 24) throw new Error("看板已保存 24 张图表，请先移除不需要的图表。");
+      const names = { bar: "柱状图", line: "折线图", pie: "占比图" };
+      const item = {
+        id: crypto.randomUUID(), title: `${metric.key}${names[chart]}`.slice(0,80),
+        note: "", size: items.length === 0 ? "wide" : "normal",
+        dataset: structuredClone(dataset), view: structuredClone(view || defaultView(dataset)),
+        metricKey: metric.key, chart, sort,
+        question: messages.findLast(m => m.role === "user")?.text || "",
+        createdAt: new Date().toISOString(),
+      };
+      await apiRequest("/api/library/board", { owner, revision, items: [...items, item] }, { method: "PUT" });
+      if (ownerRef.current === owner) setNotice("图表已加入分析看板，继续提问可保存更多视角");
+    } catch (e) { if (ownerRef.current === owner) setNotice(e.message); }
+    finally { setAssetBusy(false); }
+  }
+  async function startDatasetAnalysis(value) {
+    if (busy || assetBusy || records.loading) return;
+    const owner = user.username;
+    setAssetBusy(true);
+    try {
+      const original = await apiRequest('/api/sheets/resolve',{owner,dataset:value});
+      if (ownerRef.current !== owner) return;
+      const table = original.item?.table || tableFromDataset(value);
+      if (!await records.newRecord()) throw new Error("原分析未保存，请返回工作台重试保存。");
+      if (ownerRef.current !== owner) return;
+      navigate("/");
+      await prepareImport(table,original.item?{sheetId:original.item.id,rawAlreadySaved:true}:{});
+    } catch (e) { if (ownerRef.current === owner) setNotice(e.message); }
+    finally { setAssetBusy(false); }
+  }
+  async function uploadFromLibrary() {
+    if (busy || assetBusy || records.loading) return;
+    if (!await records.newRecord()) { setNotice("请先保存当前分析，再导入新数据。"); return; }
+    navigate("/");
+    requestAnimationFrame(() => fileRef.current?.click());
+  }
   const voice = useVoiceInput({
     owner: user?.username,
     scope: `${user?.username || ""}:${records.activeId}`,
@@ -298,25 +449,68 @@ export default function App() {
       requestAnimationFrame(() => inputRef.current?.focus());
     },
   });
-  function loadSample(s) {
-    if (records.loading || busy) return;
-    version.current++;
-    setDataset(structuredClone(s));
-    setView(defaultView(s));
-    setMetricKey(s.metrics[0].key);
-    setDraft(null);
-    setError("");
-    setEditing(false);
-    setSort(false);
-    setChart(s.id === "budget" ? "pie" : "bar");
-    setExamples(false);
-    setTab("chart");
-    setNotice(`已载入“${s.title}”演示数据`);
-  }
   async function clear() {
     await records.newRecord();
     setSidebar(true);
     inputRef.current?.focus();
+  }
+  function showTable(table) {
+    setSheetIncoming({ id: crypto.randomUUID(), owner:user.username, table });
+    navigate('/sheets');
+  }
+  async function prepareImport(value, options = {}) {
+    const table = validateRawTable(value), owner = user.username;
+    const token = ++version.current, controller = new AbortController();
+    agentAbort.current = controller;
+    const job = { table, startedAt: Date.now(), sheetId: options.sheetId || null, ...(options.originalFile ? {originalFile:options.originalFile} : {}) };
+    setPendingImport(job); setBusy(true); setError(''); setLastRequest('');
+    followConversation.current = true;
+    setAIState('requesting'); setAgentSteps([]); setAgentStatus('正在保存原表并准备 AI 整理');
+    setSidebar(true);
+    const importPrompt=options.question || `导入“${table.title}”，请理解全部字段并选择合适的分析展示。`;
+    setMessages(items => [...items, { role:'user', text: importPrompt }].slice(-100));
+    setQuestionHistory(items=>[...items,importPrompt]);
+    try {
+      if (!options.rawAlreadySaved && !job.sheetId) {
+        const saved = await apiRequest('/api/sheets', { owner, table, ...(job.originalFile ? {originalFile:job.originalFile} : {}) });
+        if (token !== version.current || ownerRef.current !== owner) return;
+        job.sheetId = saved.item.id;
+        table.projectId = saved.item.table.projectId;
+        delete job.originalFile;
+        setPendingImport({ ...job });
+      }
+      if (job.sheetId) setWorkspaceSource({sheetId:job.sheetId,projectId:table.projectId,title:table.title});
+      controller.signal.throwIfAborted();
+      const result = await importRequest({ owner, table, text: options.question || '' }, event => {
+        if (token !== version.current) return;
+        if (event.type === 'model') {setModel(event.model);setAgentStatus(event.text);}
+        if (event.type === 'status') setAgentStatus(event.text);
+        if (event.entry) setAgentSteps(steps => [...steps.filter(step => step.id !== event.entry.id), event.entry]);
+      }, controller.signal);
+      if (token !== version.current || ownerRef.current !== owner) return;
+      if (result.model) setModel(result.model);
+      const data = { ...validateDataset(result.dataset), source: result.dataset.source || table.source, ...(table.projectId?{projectId:table.projectId}:{}), ...(job.sheetId?{sourceSheetId:job.sheetId}:{}) };
+      setDataset(data); setDraft(null); setView(result.view); setMetricKey(result.metricKey);
+      setChart(result.chart); setSort(result.sort); setTab('chart'); setStoredReport(null);
+      setPendingImport(null); setAIState('success'); setAgentSteps([]); setAgentStatus('');
+      say(result.answer, {animate: true, trace: result.trace});
+      return true;
+    } catch (error) {
+      if (token === version.current && ownerRef.current === owner) {
+        const message = error.name === 'AbortError' ? '已停止 AI 整理，原表已保留，可修改后重试。' : error.message;
+        setPendingImport({ ...job, error:message }); setAIState('failed'); setAgentStatus('');
+        say(`导入尚未应用图表：${message}`);
+      }
+      return false;
+    } finally {
+      if (token === version.current) setBusy(false);
+      if (agentAbort.current === controller) agentAbort.current = null;
+    }
+  }
+  async function analyzeTable(table, options = {}) {
+    if (!await records.newRecord()) throw new Error('请先保存当前分析，再继续。');
+    navigate('/');
+    await prepareImport(table, {rawAlreadySaved:true,sheetId:options.sheetId});
   }
   async function importFile(file) {
     if (!file || busy || records.loading) return;
@@ -330,56 +524,45 @@ export default function App() {
     setBusy(true);
     try {
       const ext = file.name.split(".").pop().toLowerCase();
-      let d;
+      let table;
       if (ext === "xlsx") {
         const { readSheet } = await import("read-excel-file/browser");
-        d = fromMatrix(
+        table = tableFromMatrix(
           await readSheet(file),
           file.name.replace(/\.[^.]+$/, ""),
+          `原始文件：${file.name}`,
         );
       } else {
         const raw = await file.text();
         if (ext === "json") {
           const parsed = JSON.parse(raw);
-          d = Array.isArray(parsed)
-            ? fromMatrix(
+          const headers = Array.isArray(parsed) ? [...new Set(parsed.flatMap(row => Object.keys(row || {})))] : [];
+          table = Array.isArray(parsed)
+            ? tableFromMatrix(
                 [
-                  Object.keys(parsed[0] || {}),
-                  ...parsed.map((r) => Object.keys(parsed[0]).map((k) => r[k])),
+                  headers,
+                  ...parsed.map((row) => headers.map(key => row[key] ?? null)),
                 ],
-                file.name,
+                file.name.replace(/\.[^.]+$/, ''), `原始文件：${file.name}`,
               )
-            : validateDataset(parsed);
+            : parsed.headers && parsed.rows ? validateRawTable(parsed) : tableFromDataset(parsed);
         } else if (["csv", "tsv"].includes(ext)) {
           const p = Papa.parse(raw, { skipEmptyLines: "greedy" });
           if (p.errors.some((e) => e.code !== "UndetectableDelimiter"))
             throw new Error("表格分隔格式有误，请检查引号和分隔符。");
-          d = fromMatrix(p.data, file.name.replace(/\.[^.]+$/, ""));
+          table = tableFromMatrix(p.data, file.name.replace(/\.[^.]+$/, ""), `原始文件：${file.name}`);
         } else if (ext === "txt") {
           setAIState("requesting");
-          d = validateDataset(
+          const d = validateDataset(
             (await apiRequest("/api/extract", { text: raw })).dataset,
           );
-          setAIState("success");
+          table = tableFromDataset({...d,source:`AI 提取文本：${file.name}`});
         } else throw new Error("支持 CSV、TSV、XLSX、JSON 和 TXT 文件。");
       }
+      const originalFile = await captureSourceFile(file);
       if (token !== version.current) return;
-      setDataset({
-        ...d,
-        source:
-          ext === "txt"
-            ? `MiMo AI 提取，待人工确认 / ${file.name}`
-            : `本地文件：${file.name}`,
-      });
-      setDraft(null);
-      setView(defaultView(d));
-      setChart("bar");
-      setSort(false);
-      setMetricKey(d.metrics[0].key);
-      setTab("data");
-      say(
-        `已读取“${file.name}”，保留 ${d.rows.length} 行原始数据、${d.dimensions?.length || 1} 个分类字段和 ${d.metrics.length} 个指标。可以直接告诉我按什么分组、计算或绘图，也可在右侧查看原始数据。`,
-      );
+      if (!await records.newRecord()) throw new Error('请先保存当前分析，再导入新表格。');
+      await prepareImport(table, {originalFile});
     } catch (e) {
       if (token === version.current) {
         setError(e.message);
@@ -393,10 +576,17 @@ export default function App() {
   async function submit(e, value = text) {
     e?.preventDefault();
     if (!value.trim() || busy || editing || records.loading) return;
+    if (pendingImport) {
+      setText('');
+      await prepareImport(pendingImport.table, {...pendingImport,question:value.trim()});
+      return;
+    }
     const prompt = value.trim();
+    followConversation.current = true;
     setLastRequest(prompt);
     setError("");
     setMessages((m) => [...m, { role: "user", text: prompt }].slice(-100));
+    setQuestionHistory(items=>[...items,prompt]);
     setText("");
     const token = ++version.current;
     setBusy(true);
@@ -420,6 +610,7 @@ export default function App() {
         },
         (event) => {
           if (token !== version.current) return;
+          if (event.type === 'model') {setModel(event.model);setAgentStatus(event.text);}
           if (event.type === "status") setAgentStatus(event.text);
           if (event.entry)
             setAgentSteps((steps) => [
@@ -430,12 +621,14 @@ export default function App() {
         controller.signal,
       );
       if (token !== version.current) return;
+      if (result.model) setModel(result.model);
       setAIState("success");
       if (result.kind === "agent") {
         if (result.dataset) {
           setDataset({
             ...validateDataset(result.dataset),
-            source: "MiMo Agent 录入",
+            source: "千问 Agent 录入",
+            projectId:dataset?.projectId || draft?.projectId || records.activeId,
           });
           setDraft(null);
         } else if (result.commitDraft && draft) {
@@ -453,17 +646,12 @@ export default function App() {
           setSort(result.sort);
           setTab("chart");
         }
-        setMessages((m) =>
-          [
-            ...m,
-            { role: "assistant", text: result.answer, trace: result.trace },
-          ].slice(-100),
-        );
+        say(result.answer, {animate: true, trace: result.trace});
         setAgentSteps([]);
         return;
       }
       if (result.kind === "answer") {
-        say(result.answer);
+        say(result.answer, {animate: true});
         return;
       }
       if (result.kind === "actions") {
@@ -475,7 +663,7 @@ export default function App() {
             setMetricKey(action.value);
           else if (action.tool === "sort") setSort(action.value === "desc");
         }
-        say(result.answer);
+        say(result.answer, {animate: true});
         return;
       }
       if (result.kind === "action") {
@@ -483,18 +671,18 @@ export default function App() {
           setChart(result.action);
           setTab("chart");
         } else setSort(result.action === "sort");
-        say(result.answer);
+        say(result.answer, {animate: true});
         return;
       }
       const d = validateDataset(result.dataset);
-      setDraft({ ...d, source: "MiMo AI 提取，待人工确认" });
+      setDraft({ ...d, projectId:dataset?.projectId || draft?.projectId || records.activeId, source: "千问 AI 提取，待人工确认" });
       setView(defaultView(d));
       setChart("bar");
       setSort(false);
       setMetricKey(d.metrics[0].key);
       setTab("data");
       say(
-        `MiMo 已整理出 ${d.rows.length} 行数据和 ${d.metrics.length} 个指标。请核对名称、数字和单位，确认后再绘图。`,
+        `千问 已整理出 ${d.rows.length} 行数据和 ${d.metrics.length} 个指标。请核对名称、数字和单位，确认后再绘图。`,
       );
     } catch (e) {
       if (token === version.current) {
@@ -517,6 +705,7 @@ export default function App() {
       if (!view) setView(defaultView(valid));
       setDataset({
         ...valid,
+        projectId:valid.projectId || dataset?.projectId || records.activeId,
         source: draft.source.replace("，待人工确认", "，已确认"),
       });
       if (!valid.metrics.some((m) => m.key === metricKey))
@@ -534,6 +723,7 @@ export default function App() {
   function updateDataset(d) {
     setDataset({
       ...d,
+      projectId:d.projectId || dataset?.projectId || records.activeId,
       source: dataset.source.includes("已编辑")
         ? dataset.source
         : `${dataset.source}（已编辑）`,
@@ -546,6 +736,7 @@ export default function App() {
         className="account-button"
         title={user.username}
         aria-label={`账户：${user.username}`}
+        disabled={assetBusy}
         onClick={() => navigate("/login")}
       >
         <span className="avatar">{user.username.slice(0, 1)}</span>
@@ -553,6 +744,7 @@ export default function App() {
       </button>
       <button
         className="logout-button"
+        disabled={assetBusy}
         onClick={async () => {
           try {
             await records.saveNow();
@@ -579,6 +771,7 @@ export default function App() {
       <button
         className="brand-home"
         aria-label="见数首页"
+        disabled={assetBusy}
         onClick={() => navigate("/home")}
       >
         <Logo />
@@ -586,38 +779,17 @@ export default function App() {
       <span className="top-divider" />
       <span className="workspace-name">个人工作台</span>
       {user && (
-        <nav className="topnav" aria-label="主要导航">
-          <button onClick={() => navigate("/home")}>主页</button>
-          <button
-            className={page === "/" && !examples ? "nav-active" : ""}
-            onClick={() => {
-              navigate("/");
-              setExamples(false);
-            }}
-          >
-            分析空间
-          </button>
-          <button
-            className={page === "/" && examples ? "nav-active" : ""}
-            onClick={() => {
-              navigate("/");
-              setExamples(!examples);
-            }}
-          >
-            示例数据
-          </button>
-          <button
-            className={page === "/history" ? "nav-active" : ""}
-            onClick={() => navigate("/history")}
-            disabled={busy || records.loading}
-          >
-            分析记录
-          </button>
-        </nav>
+        <WorkspaceNav page={page} disabled={busy || assetBusy || records.loading} analysisDisabled={assetBusy}
+          onNavigate={target => {
+            if (target === "/") { navigate("/"); }
+            else if (target === "/history") openAssets('/datasets');
+            else openAssets(target);
+          }} />
       )}
       <div className="top-right">
         <button
           className={`help-link ${page === "/help" ? "current" : ""}`}
+          disabled={assetBusy}
           onClick={() => navigate("/help")}
         >
           <BookOpen size={16} />
@@ -646,7 +818,7 @@ export default function App() {
     );
   if (!records.ready)
     return (
-      <div className="app-frame">
+      <WorkbenchSurface mode="workspace-loading">
         {header}
         <div className="auth-loading">
           <LoaderCircle className={records.error ? "" : "spin"} size={24} />
@@ -660,28 +832,49 @@ export default function App() {
             </button>
           )}
         </div>
-      </div>
+      </WorkbenchSurface>
     );
-  if (page === "/history")
+  if (page === '/datasets' || page === '/history') return <WorkbenchSurface mode="library-app">
+    {header}
+    <Suspense fallback={<div className="library-loading" role="status"><LoaderCircle className="spin" size={20}/>正在读取数据与分析…</div>}>
+      <CollectionPage key={`${user.username}:${assetRevision}`} user={user} activeId={records.activeId} onOpen={openCollectionItem} onUpload={uploadFromLibrary} onBusyChange={setAssetBusy}/>
+    </Suspense>
+    {notice && <div className="toast" role="status"><Check size={16}/>{notice}</div>}
+  </WorkbenchSurface>;
+  if (page === '/trash') return <WorkbenchSurface mode="library-app">
+    {header}
+    <Suspense fallback={<div className="library-loading" role="status"><LoaderCircle className="spin" size={20}/>正在打开回收站…</div>}>
+      <TrashPage key={`${user.username}:${assetRevision}`} user={user} onNotice={setNotice}/>
+    </Suspense>
+    {notice && <div className="toast" role="status"><Check size={16}/>{notice}</div>}
+  </WorkbenchSurface>;
+  if (page === '/sheets') return <WorkbenchSurface mode="sheets-app">
+    {header}
+    <Suspense fallback={<div className="library-loading" role="status"><LoaderCircle className="spin" size={20}/>正在打开数据表格…</div>}>
+      <SpreadsheetPage key={`${user.username}:${assetRevision}`} user={user} activeSource={{id:records.activeId,dataset:draft||dataset,sheetId:workspaceSource?.sheetId || (draft||dataset)?.sourceSheetId}} incomingTable={sheetIncoming?.owner === user.username ? sheetIncoming : null} onAnalyze={analyzeTable} onNotice={setNotice} onBusyChange={setAssetBusy} onBack={()=>navigate('/')}/>
+    </Suspense>
+    {notice && <div className="toast" role="status"><Check size={16}/>{notice}</div>}
+  </WorkbenchSurface>;
+  if (["/datasets", "/boards", "/reports"].includes(page))
     return (
-      <div className="app-frame records-app">
+      <WorkbenchSurface mode="library-app">
         {header}
-        <AnalysisHistory
-          records={records}
-          busy={busy}
-          onOpen={async (id) => {
-            await records.openRecord(id);
-            navigate("/");
-          }}
-        />
-      </div>
+        <Suspense fallback={<div className="library-loading" role="status"><LoaderCircle className="spin" size={20} />正在打开成果空间…</div>}>
+          <LibraryPages key={`${user.username}:${page}:${assetRevision}`} page={page} user={user}
+            onBusyChange={setAssetBusy}
+            onStartDataset={startDatasetAnalysis} onUpload={uploadFromLibrary}
+            onOpenRecord={async id => { if (await records.openRecord(id)) navigate("/"); else setNotice("这条分析暂时无法打开，请稍后重试。"); }}
+            onNotice={setNotice} />
+        </Suspense>
+        {notice && <div className="toast" role="status"><Check size={16} />{notice}</div>}
+      </WorkbenchSurface>
     );
   if (page === "/help")
     return (
-      <div className="app-frame">
+      <WorkbenchSurface mode="help-app">
         {header}
         <HelpPage navigate={navigate} />
-      </div>
+      </WorkbenchSurface>
     );
   if (page === "/login")
     return (
@@ -693,10 +886,11 @@ export default function App() {
     <WorkbenchSurface viewKey={`${tab}:${chart}:${metric?.key}:${analyzed?.rows.length}`}>
       {header}
       <fieldset
+        ref={workspaceRoot}
         className={`workspace ${sidebar ? "" : "sidebar-closed"}`}
         disabled={records.loading}
       >
-        <aside className="sidebar" aria-label="数据输入与分析对话" data-workbench-pane>
+        <aside className="sidebar" aria-label="数据输入与分析对话" aria-hidden={!sidebar} inert={!sidebar} data-workbench-pane>
           <section className="agent-thread" aria-label="AI 分析助手">
             <header className="composer-agent-heading">
               <div className="assistant-identity">
@@ -717,9 +911,12 @@ export default function App() {
               <span>{dataset?.title || "新的分析对话"}</span>
               <small>{dataset ? `${dataset.rows.length} 行` : "等待添加数据"}</small>
             </div>
-            <div className="conversation" aria-live="polite">
-              {messages.map((m, i) => (
-                <div className={`message ${m.role}`} key={i}>
+            <div className="conversation" aria-live="polite" onScroll={event => {
+              const box = event.currentTarget;
+              followConversation.current = box.scrollHeight - box.clientHeight - box.scrollTop < 48;
+            }}>
+              {messages.map(m => (
+                <div className={`message ${m.role}`} key={presentationFor(m).id}>
                   {m.role === "assistant" && (
                     <span className="assistant-label">
                       <span className="mini-mark" />
@@ -727,31 +924,9 @@ export default function App() {
                     </span>
                   )}
                   {m.role === "assistant" ? (
-                    <div className="message-markdown">
-                      <Markdown skipHtml>{m.text}</Markdown>
-                    </div>
+                    <AssistantReply message={m} presentation={presentationFor(m)} onProgress={scrollConversation}/>
                   ) : (
                     <p>{m.text}</p>
-                  )}
-                  {m.trace?.length > 0 && (
-                    <details className="tool-trace">
-                      <summary>查看执行过程（{m.trace.length} 步）</summary>
-                      <ol>
-                        {m.trace.map((step, j) => (
-                          <li key={j} className={step.status}>
-                            <span>
-                              {step.status === "success" ? (
-                                <Check size={13} />
-                              ) : (
-                                <Info size={13} />
-                              )}{" "}
-                              {step.label}
-                            </span>
-                            <small>{step.summary}</small>
-                          </li>
-                        ))}
-                      </ol>
-                    </details>
                   )}
                 </div>
               ))}
@@ -810,7 +985,10 @@ export default function App() {
                 maxLength={12000}
                 disabled={editing || voice.active}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(e);
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+                    e.preventDefault();
+                    if (!e.repeat) submit(e);
+                  }
                 }}
               />
               <div className="compose-tools">
@@ -823,7 +1001,7 @@ export default function App() {
                 >
                   <Plus size={19} />
                 </button>
-                <span className="composer-shortcut">Ctrl + Enter</span>
+                <span className="composer-shortcut" title="Shift + Enter 换行">Enter 发送</span>
                 <div
                   className={`ai-status composer-model-status ${aiState}`}
                   role="status"
@@ -839,17 +1017,17 @@ export default function App() {
                       : voice.phase === "recording"
                         ? `录音中 ${voice.seconds}s`
                         : voice.phase === "transcribing"
-                          ? "MiMo 识别中"
+                          ? "千问 识别中"
                           : voice.phase === "success"
-                            ? "MiMo 识别成功"
+                            ? "千问 识别成功"
                             : {
-                                checking: "MiMo 检查中",
-                                ready: "MiMo 已就绪",
-                                success: "MiMo 调用成功",
-                                requesting: "MiMo 调用中",
-                                failed: "MiMo 调用失败",
-                                unconfigured: "MiMo 未配置",
-                                offline: "MiMo 未连接",
+                                checking: "千问 检查中",
+                                ready: "千问 已就绪",
+                                success: "千问 调用成功",
+                                requesting: "千问 调用中",
+                                failed: "千问 调用失败",
+                                unconfigured: "千问 未配置",
+                                offline: "千问 未连接",
                               }[aiState]}
                   </span>
                   {["offline", "failed", "unconfigured"].includes(aiState) &&
@@ -926,7 +1104,8 @@ export default function App() {
                 </p>
               )}
               <div className="record-save-status" role="status">
-                <span>
+                <span className="composer-attribution">思考由千问提供支持</span>
+                <span className="sr-only">
                   {
                     {
                       idle: "新分析，发送后自动保存",
@@ -960,41 +1139,8 @@ export default function App() {
               )}
             </form>
           </section>
-          <p className="privacy-note">
-            思考由小米 MiMo 提供支持
-          </p>
         </aside>
-        <main className="main-sheet" data-workbench-pane>
-          {examples && (
-            <section className="examples-tray">
-              <div className="section-heading">
-                <h2>从一个小问题开始</h2>
-                <button
-                  className="icon-button"
-                  aria-label="关闭示例"
-                  onClick={() => setExamples(false)}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="example-options">
-                {samples.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => loadSample(s)}
-                    disabled={busy}
-                  >
-                    <strong>
-                      {s.title}
-                      <ArrowUpRight size={16} />
-                    </strong>
-                    <span>{s.description}</span>
-                    <small>演示数据</small>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
+        <main className={`main-sheet${pendingImport ? " import-in-progress" : ""}`} data-workbench-pane>
           <div className="page-heading">
             <div>
               <div className="title-row">
@@ -1002,13 +1148,14 @@ export default function App() {
                   <button
                     className="panel-toggle panel-toggle-open"
                     aria-label="展开输入面板"
+                    title="展开 AI 对话"
                     onClick={() => setSidebar(true)}
                   >
-                    <PanelLeftOpen size={19} /><span>展开</span>
+                    <PanelLeftOpen size={20} />
                   </button>
                 )}
                 <h1>
-                  {draft
+                  {pendingImport ? pendingImport.table.title : draft
                     ? "核对你的数据"
                     : dataset?.title || "开始一次新的发现"}
                 </h1>
@@ -1016,22 +1163,29 @@ export default function App() {
                   <span className="sample-tag">演示数据</span>
                 )}
               </div>
-              <p className="dataset-description">
+              {(pendingImport || draft || dataset) && <p className="dataset-description">
+                {pendingImport ? `${pendingImport.table.rows.length} 行原始数据 · 正在由 AI 确定字段与展示` :
+                 <>
                 {draft
                   ? "确认名称、数值和单位，结果将从这里生成。"
                   : dataset
                     ? `${filteredSource.rows.length} 行${view?.filters?.length ? ` / 全部 ${dataset.rows.length} 行` : "原始数据"} · ${dataset.metrics.length} 个指标`
-                    : "分析画布"}
-              </p>
+                    : ""}</>}
+              </p>}
             </div>
+            <div className="workspace-asset-actions">
+            {dataset && !draft && !pendingImport && <>
+              <button className="secondary-button" disabled={busy || editing || assetBusy} onClick={pinChart}><LayoutDashboard size={16}/>{assetBusy ? "正在保存…" : "加入看板"}</button>
+            </>}
             <button
               className="secondary-button export-top"
-              disabled={!dataset || Boolean(draft) || editing || busy}
+              disabled={!dataset || Boolean(draft) || editing || busy || !!pendingImport}
               onClick={generateReport}
             >
               <Download size={16} />
               生成报告
             </button>
+            </div>
           </div>
           {error && (
             <div className="error-banner" role="alert">
@@ -1055,7 +1209,10 @@ export default function App() {
               </button>
             </div>
           )}
-          {draft ? (
+          {pendingImport ? <ImportReviewPanel job={pendingImport} busy={busy} status={agentStatus} steps={agentSteps}
+            onRetry={() => prepareImport(pendingImport.table,pendingImport)}
+            onEdit={() => showTable(pendingImport.table)}
+            onCancel={() => {setPendingImport(null);setError('');setAgentSteps([]);}}/> : draft ? (
             <section className="draft-panel">
               <div className="section-heading">
                 <h2>
@@ -1152,7 +1309,7 @@ export default function App() {
                           </h2>
                           <p className="subtle">
                             {dataset.rows.length} 行原始数据 →{" "}
-                            {analyzed.rows.length} 组结果，按
+                            {analyzed.rows.length} 组结果{chartSelection.selection ? `（图表保留 ${chartData.rows.length} 组背景）` : ''}，按
                             {sort ? "数值降序" : "原始顺序"}展示
                           </p>
                         </div>
@@ -1174,14 +1331,33 @@ export default function App() {
                           ))}
                         </div>
                       </div>
-                      <div className="chart-toolbar">
-                        <details className="analysis-settings" onKeyDown={(e) => {
+                      <ChartSelectionBar data={chartData} interaction={chartInteraction} sourceRows={filteredSource.rows.length} totalRows={dataset.rows.length} disabled={busy || editing}
+                        context={view?.groupBy
+                          ? `${view.groupBy === "name" ? "分类" : view.groupBy}${view.granularity === "month" ? "（月）" : view.granularity === "year" ? "（年）" : ""} · ${{ sum: "求和", average: "平均值", count: "有效记录数", min: "最小值", max: "最大值" }[aggregationFor(metric, view.aggregation)]}`
+                          : "原始记录"}
+                        controls={<>
+                        <label className="metric-select primary-metric">
+                          指标
+                          <select
+                            aria-label="指标"
+                            value={metric.key}
+                            onChange={(e) => setMetricKey(e.target.value)}
+                          >
+                            {dataset.metrics.map((m) => (
+                              <option key={m.key} value={m.key}>
+                                {m.key}
+                                {m.unit ? `（${m.unit}）` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <details className="analysis-settings" name="chart-analysis-controls" onKeyDown={(e) => {
                           if (e.key === "Escape") {
                             e.currentTarget.open = false;
                             e.currentTarget.querySelector("summary")?.focus();
                           }
                         }}>
-                          <summary><SlidersHorizontal size={14} />分析设置<ChevronDown size={13} /></summary>
+                          <summary><SlidersHorizontal size={14} />更多设置<ChevronDown size={13} /></summary>
                           <div className="advanced-controls">
                         <label className="metric-select">
                           分组
@@ -1248,23 +1424,6 @@ export default function App() {
                             </select>
                           </label>
                         )}
-                          </div>
-                        </details>
-                        <label className="metric-select primary-metric">
-                          指标
-                          <select
-                            aria-label="指标"
-                            value={metric.key}
-                            onChange={(e) => setMetricKey(e.target.value)}
-                          >
-                            {dataset.metrics.map((m) => (
-                              <option key={m.key} value={m.key}>
-                                {m.key}
-                                {m.unit ? `（${m.unit}）` : ""}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
                         <button
                           className={
                             sort ? "text-button sorted" : "text-button"
@@ -1274,16 +1433,11 @@ export default function App() {
                           <ChevronsUpDown size={14} />
                           {sort ? "原始顺序" : "数值排序"}
                         </button>
-                      </div>
-                      <p className="view-description">
-                        {view?.groupBy
-                          ? `按${view.groupBy === "name" ? "分类" : view.groupBy}${view.granularity === "month" ? "（月）" : view.granularity === "year" ? "（年）" : ""}分组；${metric.key}使用${{ sum: "求和", average: "平均值", count: "有效记录计数", min: "最小值", max: "最大值" }[aggregationFor(metric, view.aggregation)]}`
-                          : "按原始记录展示"}
-                        {view?.filters?.length
-                          ? `；已应用 ${view.filters.length} 个筛选条件`
-                          : ""}
-                      </p>
-                      {view?.filters?.length > 0 && (
+                          </div>
+                        </details>
+                        </>}
+                        filters={<>
+{view?.filters?.length > 0 && (
                         <div className="active-filters">
                           {view.filters.map((f, i) => (
                             <span key={i}>
@@ -1297,7 +1451,7 @@ export default function App() {
                                   lte: "≤",
                                 }[f.op]
                               }{" "}
-                              {Array.isArray(f.value) ? f.value.join("、") : f.value}
+                              {Array.isArray(f.value) ? f.value.join("、") : typeof f.value === 'string' ? f.value.replace(/T23:59:59(?:\.999)?Z$/, '') : f.value}
                             </span>
                           ))}
                           <button
@@ -1309,12 +1463,14 @@ export default function App() {
                           </button>
                         </div>
                       )}
+                        </>}
+                      />
                       <div className="chart-summary">
                       <div className="hero-stat">
-                        <span>{metric.key}合计</span>
+                        <span title={headline.caption}>{headline.label}</span>
                         <div>
-                          {format(stats.total)}
-                          <small>{metric.unit}</small>
+                          {format(headline.value)}
+                          <small>{headline.unit || metric.unit}</small>
                         </div>
                       </div>
                       <div className="finding">
@@ -1336,9 +1492,10 @@ export default function App() {
                           }
                         >
                           <ChartView
-                            data={displayed}
+                            data={chartData}
                             metric={metric}
                             type={chart}
+                            interaction={chartInteraction}
                           />
                         </Suspense>
                       </ChartBoundary>
@@ -1404,7 +1561,7 @@ export default function App() {
                         <ArrowUpRight size={15} />
                       </button>
                     </div>
-                    <DataTable dataset={filteredSource} limit={3} />
+                    <DataTable dataset={filteredSource} limit={filteredSource.rows.length} />
                     <div className="source-caption">
                       <Link2 size={13} />
                       {dataset.source}
@@ -1421,6 +1578,9 @@ export default function App() {
                       </span>
                     </h2>
                     <div className="row-actions">
+                      <button className="secondary-button" onClick={() => showTable(tableFromDataset(dataset))} disabled={busy}>
+                        <FileSpreadsheet size={15}/>在数据表格中打开
+                      </button>
                       <button
                         className="secondary-button"
                         onClick={() => {
@@ -1478,7 +1638,7 @@ export default function App() {
                   <FileText size={32} />
                   <h2>{savedReport ? "本次分析报告" : "让 AI 将本次分析整理成报告"}</h2>
                   {savedReport ? <>
-                    <p className="report-generated-meta">{savedReport.mode === "ai" ? `${savedReport.model} · 深度分析` : "程序统计报告"} · {savedReport.pages} 页 · {savedReport.chartCount} 幅专题图表 · {new Date(savedReport.createdAt).toLocaleString("zh-CN")}</p>
+                    <p className="report-generated-meta">{savedReport.mode === "ai" ? `${savedReport.models?.join(' / ') || savedReport.model} · 深度分析` : "程序统计报告"} · {savedReport.pages} 页 · {savedReport.chartCount} 幅专题图表 · {new Date(savedReport.createdAt).toLocaleString("zh-CN")}</p>
                     {!currentReport && <p className="subtle">报告范围、当前数据或问题已变化，以下为上次保存的版本。点击重新生成，可获得整份数据的报告与独立问题专题。</p>}
                     <p>{savedReport.narrative.summary}</p>
                     <h3>{savedReport.reportScope === "overall" ? "整体分析结论" : "原报告分析结论"}</h3><p>{savedReport.narrative.answer}</p>
@@ -1490,7 +1650,7 @@ export default function App() {
                       <ol>{savedReport.narrative.questionSection.chapters.slice(0, 2).map(c => <li key={c.chartId}>{c.title}</li>)}</ol>
                     </>}
                   </> : <>
-                    <p>由 MiMo 对整份数据进行全面分析，展示整体趋势、构成、差异和数据质量；另设 1—2 页专题，结合当前筛选回应你的问题。生成后可预览 PDF 再导出。</p>
+                    <p>由 千问 对整份数据进行全面分析，展示整体趋势、构成、差异和数据质量；另设 1—2 页专题，结合当前筛选回应你的问题。生成后可预览 PDF 再导出。</p>
                     <ol><li>核对全部数据，形成整体概况与核心发现</li><li>分析趋势、构成与差异，给出图表和行动建议</li><li>单列用户问题专题，标明筛选范围与计算依据</li></ol>
                   </>}
                   <div className="report-preview-actions">
@@ -1552,14 +1712,6 @@ export default function App() {
           )}
           <footer className="workspace-footer">
             <span>见数，让分析有据可循。</span>
-            <button
-              className="text-button"
-              onClick={() => fileRef.current.click()}
-              disabled={busy}
-            >
-              <Upload size={14} />
-              导入数据
-            </button>
           </footer>
         </main>
       </fieldset>
@@ -1571,12 +1723,6 @@ export default function App() {
         aria-label="选择数据文件"
         onChange={(e) => importFile(e.target.files[0])}
       />
-      {!sidebar && (
-        <button className="ai-floating-entry" onClick={focusAI}>
-          <Sparkles size={20} />
-          AI 分析助手
-        </button>
-      )}
       {notice && (
         <div className="toast" role="status">
           <Check size={16} />
@@ -1586,6 +1732,7 @@ export default function App() {
       {reportInput && (
         <ReportStudio
           input={reportInput}
+          onModel={setModel}
           onClose={() => setReportInput(null)}
           initialResult={reportInput.cachedResult}
           onResult={result => {

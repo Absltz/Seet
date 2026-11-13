@@ -1,0 +1,31 @@
+/* 所有内页共享纸色、表面色与边线，避免导航继承旧版底色。 */
+.app-frame.workspace-chrome{--ground:#f5f4ee;--surface:#fff;--raised:#f6f7f3;--ink:#243d33;--muted:#647168;--accent:#215847;--accent-hover:#184433;--accent-soft:#edf2e9;--line:#e5e8e1;--control:#ccd6cb;--workspace-tab-fill:var(--accent);--workspace-tab-ink:#fff;--workspace-tab-mark:#dce9b3;background:var(--ground);color:var(--ink)}
+/* 所有内页用深绿凸起页签标明当前位置，与暖白底色拉开层次。 */
+.app-frame.workspace-chrome > .topbar{height:84px;padding-inline:28px;gap:20px;align-items:stretch;position:relative;z-index:2;background:var(--ground)}
+.workspace-chrome .brand strong{font-size:25px}.workspace-chrome .brand-en{font-size:23px}.workspace-chrome .brand-mark{transform:scale(.83) skewY(-12deg);transform-origin:left center;margin-right:-3px}
+.workspace-chrome > .topbar > .brand-home,.workspace-chrome > .topbar > .top-right{align-self:center}
+.app-frame .topnav.workspace-tabs{position:relative;isolation:isolate;gap:0;margin-left:4px;padding:0 10px;align-items:stretch;flex-shrink:0;height:100%}
+.app-frame .workspace-tabs > button{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;min-width:104px;min-height:44px;height:100%;padding:8px 16px 0;color:var(--muted);font-size:13px;font-weight:500;white-space:nowrap;background:transparent;transition:color .18s}
+.app-frame .workspace-tabs > button:hover:not(:disabled){color:var(--accent)}
+.app-frame .workspace-tabs > button:active{transform:none}
+.app-frame .workspace-tabs > button[aria-current="page"]{color:var(--accent);font-weight:600}
+.app-frame .workspace-tabs > button.nav-active::after{display:none}
+.workspace-tab-surface{position:absolute;bottom:-1px;left:0;width:160px;height:66px;pointer-events:none;transform-origin:0 100%;opacity:0;will-change:transform;z-index:0}
+.workspace-tab-surface svg{display:block;width:100%;height:100%;overflow:visible;fill:var(--workspace-tab-fill);stroke:var(--workspace-tab-fill);stroke-width:1;vector-effect:non-scaling-stroke}
+.workspace-tab-surface i{position:absolute;left:calc(50% - 21px);bottom:13px;width:42px;height:2px;border-radius:2px;background:var(--workspace-tab-mark)}
+/* 白色文字只出现在移动中的深色页签内，切换途中也不会白字落在浅底上。 */
+.workspace-tab-contrast{position:absolute;top:0;left:0;z-index:2;display:flex;align-items:stretch;width:max-content;min-width:100%;height:100%;padding-inline:10px;pointer-events:none;opacity:0;clip-path:inset(0 100% 0 0);color:var(--workspace-tab-ink)}
+.workspace-tab-contrast>span{display:flex;align-items:center;justify-content:center;flex-shrink:0;min-width:104px;height:100%;padding:8px 16px 0;font-size:13px;font-weight:500;white-space:nowrap}
+.workspace-tab-contrast>span.current{font-weight:600}
+.workspace-chrome.canvas-workbench .workspace{min-height:0;height:calc(100dvh - 84px)}
+@media(max-width:1200px){.app-frame .topnav.workspace-tabs{margin-left:0;padding-inline:6px}.app-frame .workspace-tabs > button{min-width:88px;padding-inline:10px}.workspace-tab-contrast{padding-inline:6px}.workspace-tab-contrast>span{min-width:88px;padding-inline:10px}.app-frame.workspace-chrome>.topbar{gap:12px}}
+@media(max-width:760px){
+  .app-frame.workspace-chrome>.topbar{height:auto;gap:4px 8px;padding-top:10px;padding-bottom:0;align-items:center}
+  .workspace-chrome.canvas-workbench .workspace{height:auto}
+  .app-frame .topnav.workspace-tabs{flex:1 0 100%;height:62px;min-height:62px;padding-inline:8px;margin:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;gap:0}
+  .workspace-tabs::-webkit-scrollbar{display:none}
+  .app-frame .workspace-tabs > button{min-width:84px;font-size:13px;padding:6px 9px 0;min-height:44px;height:62px}
+  .workspace-tab-contrast{padding-inline:8px}.workspace-tab-contrast>span{min-width:84px;padding:6px 9px 0;height:62px}
+  .workspace-tab-surface{height:55px}.workspace-tab-surface i{bottom:11px;width:32px;left:calc(50% - 16px)}
+}
+@media(prefers-reduced-motion:reduce){.workspace-tab-surface{will-change:auto}}

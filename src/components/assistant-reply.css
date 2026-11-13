@@ -1,0 +1,32 @@
+.assistant-reply .message-markdown { min-height: 1.85em; }
+.assistant-reply .reply-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 12px 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  scrollbar-width: thin;
+}
+.assistant-reply .reply-table-scroll table { width: 100%; min-width: 350px; }
+.assistant-reply .reply-table-scroll :is(th, td) {
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.7;
+  vertical-align: top;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.assistant-reply .reply-table-scroll th { background: var(--raised); color: var(--ink); font-weight: 600; }
+.assistant-reply .reply-table-scroll tbody tr:last-child td { border-bottom: 0; }
+.reply-revealing .message-markdown > p:last-child::after,
+.reply-revealing .message-markdown > :is(ul, ol):last-child > li:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 5px;
+  height: .9em;
+  margin-left: 4px;
+  vertical-align: -.08em;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: .65;
+}

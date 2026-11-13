@@ -9,7 +9,7 @@ export async function apiRequest(url, body, options = {}) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           }),
-      signal: AbortSignal.timeout(50000),
+      signal: AbortSignal.timeout(['/api/extract','/api/chat'].includes(url)?135000:50000),
       ...options,
     });
   } catch (error) {
@@ -32,7 +32,13 @@ export async function apiRequest(url, body, options = {}) {
   return result;
 }
 export async function agentRequest(body, onEvent, signal) {
-  const response = await fetch("/api/agent", {
+  return streamRequest('/api/agent', body, onEvent, signal);
+}
+export async function importRequest(body, onEvent, signal) {
+  return streamRequest('/api/import', body, onEvent, signal);
+}
+async function streamRequest(url, body, onEvent, signal) {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

@@ -235,7 +235,7 @@ export async function renderReportPdf(s, n) {
   const titleEnd = text(s.title, 48, 86, 22, W);
   text(s.reportScope === "overall" ? "整份数据分析报告 · 全局分析与用户问题专题" : "数据分析报告", 48, titleEnd + 8, 10, W, c.muted);
   text(
-    `${new Date(s.createdAt).toLocaleString("zh-CN")}  /  ${n.mode === "ai" ? "MiMo AI 解读" : "程序统计解读"}`,
+    `${new Date(s.createdAt).toLocaleString("zh-CN")}  /  ${n.mode === "ai" ? "千问 AI 解读" : "程序统计解读"}`,
     48,
     titleEnd + 30,
     8,
@@ -309,24 +309,34 @@ export async function renderReportPdf(s, n) {
   }
   if (s.questionSection && n.questionSection) {
     const focus = s.questionSection, response = n.questionSection;
-    const chapters = response.chapters.slice(0, 2);
+    // Reserve fixed text areas so even long valid prose cannot silently turn
+    // the promised one-to-two-page supplement into additional PDF pages.
+    const compact = (value, currentY, size, maxHeight, color = c.ink) =>
+      text(value, 48, currentY, size, W, color, { height: maxHeight, ellipsis: true });
+    const chapters = response.chapters.length ? response.chapters.slice(0, 2) : [null];
     for (const [index, chapter] of chapters.entries()) {
-      const candidate = focus.charts.find(item => item.id === chapter.chartId);
-      if (!candidate) continue;
+      const candidate = chapter && focus.charts.find(item => item.id === chapter.chartId);
       doc.addPage();
       pageHeader(`用户问题专题 · ${index + 1} / ${chapters.length}`);
-      y = text(chapter.title, 48, 87, 17, W) + 12;
-      const filters = focus.view.filters.map(f => `${f.field} ${f.op === "eq" ? "=" : f.op === "in" ? "属于" : f.op} ${Array.isArray(f.value) ? f.value.join("、") : f.value}`).join("；") || "全部记录";
-      y = text(`专题范围：${filters}；指标：${focus.metric.key}。本页数值仅代表该专题范围。`, 48, y, 8, W, c.muted) + 10;
+      y = compact(chapter?.title || "关注点与证据边界", 87, 17, 44) + 9;
+      y = compact(candidate?.scope || "本专题根据全部用户关注点分别核对原始数据，不能以工作台当前筛选代替各关注点的范围。", y, 8, 38, c.muted) + 6;
       if (index === 0) {
-        y = text("你的问题：“" + (focus.questions.at(-1) || "当前分析").slice(0, 100) + "”", 48, y, 9, W) + 8;
-        y = text(response.answer, 48, y, 9, W) + 12;
+        y = compact("关注点归纳：" + (response.focus || response.summary), y, 9, 34) + 5;
+        if (response.questionCoverage?.note || focus.questionCoverage?.note)
+          y = compact(response.questionCoverage?.note || focus.questionCoverage.note, y, 8, 24, c.muted) + 5;
+        y = compact(response.answer, y, 9, 52) + 10;
       }
-      y = text(candidate.title + " / " + candidate.metric.unit, 48, y, 9, W, c.muted) + 15;
+      if (!candidate) {
+        compact(response.limitations.join("\n"), y, 9, Math.max(80, 724 - y), c.muted);
+        continue;
+      }
+      y = compact(candidate.title + " / " + candidate.metric.unit, y, 9, 24, c.muted) + 8;
       chart(y, { ...candidate, chart: candidate.type, chartAvailable: true, resultRows: candidate.rows.length });
       y += 216;
-      y = text(chapter.analysis, 48, y, 9, W) + 12;
-      text(facts(chapter.evidence.slice(0, 4), focus), 48, y, 8, W, c.green);
+      y = compact(chapter.analysis, y, 9, 68) + 8;
+      y = compact(facts(chapter.evidence.slice(0, 4), focus), y, 8, 42, c.green) + 6;
+      if (index === chapters.length - 1 && response.limitations.length)
+        compact(response.limitations.slice(0, 2).join("；"), y, 8, 38, c.muted);
     }
   }
   doc.addPage();

@@ -171,11 +171,18 @@ export function dataProfile(data) {
   return {
     title: data.title,
     rowCount: data.rows.length,
-    dimensions: dimensionsFor(data).map((d) => ({
-      ...d,
-      unique: new Set(data.rows.map((r) => r[d.key])).size,
-      examples: [...new Set(data.rows.map((r) => r[d.key]))].slice(0, 8),
-    })),
+    dimensions: dimensionsFor(data).map((d) => {
+      const values = [...new Set(data.rows.map((r) => r[d.key]))];
+      return {
+        ...d,
+        unique: values.length,
+        examples: values.slice(0, 8),
+        examplesComplete: values.length <= 8,
+        hasMoreExamples: values.length > 8,
+        remainingExamples: Math.max(0, values.length - 8),
+      };
+    }),
+    dimensionNotes: 'examples仅为字段示例，不是查询结果；列举字段有哪些值时必须用list_values获取指定范围的去重名单，不可从样本推断全集。',
     metrics: data.metrics.map((m) => {
       const s = summarize(data, m.key);
       return {

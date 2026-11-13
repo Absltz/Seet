@@ -145,7 +145,7 @@ function PdfPreview({ bytes, onReady }) {
     </>
   );
 }
-export default function ReportStudio({ input, onClose, initialResult, onResult }) {
+export default function ReportStudio({ input, onClose, initialResult, onResult, onModel, readOnly = false, backLabel = "返回分析" }) {
   const dialog = useRef(null),
     controller = useRef(null),
     run = useRef(0);
@@ -174,7 +174,10 @@ export default function ReportStudio({ input, onClose, initialResult, onResult }
       const data = await requestReport(
         { ...input, allowStatistical },
         (event) => {
-          if (run.current === token) setProgress(event);
+          if (run.current === token) {
+            setProgress(previous=>({...previous,...event}));
+            if(event.type==='model')onModel?.(event.model);
+          }
         },
         abort.signal,
       );
@@ -225,20 +228,20 @@ export default function ReportStudio({ input, onClose, initialResult, onResult }
       <header className="report-studio-header">
         <button onClick={onClose} className="report-back">
           <ArrowLeft size={18} />
-          <span>返回分析</span>
+          <span>{backLabel}</span>
         </button>
         <div className="report-document-title">
           <FileText size={18} />
           <strong>{result?.title || input.dataset.title}</strong>
-          <span>分析报告</span>
+          <span>{result?.mode==='rules'?'统计报告':(result?.models?.join(' / ') || result?.model || progress.model || '分析报告')}</span>
         </div>
         <div className="report-header-actions">
           {status === "ready" && (
             <>
-              <button onClick={() => generate()} className="report-regenerate" aria-label="重新生成">
+              {!readOnly && <button onClick={() => generate()} className="report-regenerate" aria-label="重新生成">
                 <RotateCcw size={15} />
                 <span>重新生成</span>
-              </button>
+              </button>}
               <a
                 className="report-download"
                 href={url || undefined}
@@ -265,7 +268,7 @@ export default function ReportStudio({ input, onClose, initialResult, onResult }
           <p>{progress.text}</p>
           {input.history?.some(m => m.role === "user") && <p className="report-focus-question">本次关注：{input.history.filter(m => m.role === "user").at(-1).text.slice(0, 160)}</p>}
           <ol>
-            {["核对数据、对话与分析问题", statistical ? "整理统计结果与图表" : "MiMo 深度思考与撰写专题", "复核图表、排版与 PDF 预览"].map(
+            {["核对数据、对话与分析问题", statistical ? "整理统计结果与图表" : "千问 深度思考与撰写专题", "复核图表、排版与 PDF 预览"].map(
               (label, index) => (
                 <li
                   key={label}
@@ -312,7 +315,7 @@ export default function ReportStudio({ input, onClose, initialResult, onResult }
               {result.mode === "ai" ? (
                 <>
                   <Sparkles size={14} />
-                  MiMo AI 解读
+                  千问 AI 解读{result.models?.length ? ` · ${result.models.join(' / ')}` : result.model ? ` · ${result.model}` : ''}
                 </>
               ) : (
                 "程序统计解读"

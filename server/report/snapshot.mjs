@@ -1,5 +1,6 @@
 import { validateDataset, summarize } from "../../src/data.mjs";
 import { exploreReport } from "./explore.mjs";
+import { questionBatches } from "./questionHistory.mjs";
 import {
   buildView,
   defaultView,
@@ -12,10 +13,14 @@ import {
 
 export function prepareReportBundle(input) {
   const data = validateDataset(input?.dataset);
-  const overall = prepareReport({ ...input, view: defaultView(data), chart: "bar", sort: false, history: [] });
+  const overall = prepareReport({ ...input, view: defaultView(data), chart: "bar", sort: false, history: [], questionHistory: [] });
   overall.reportScope = "overall";
   const focused = prepareReport(input);
   const question = focused.questions.length ? { ...focused, reportScope: "question" } : null;
+  if (question) question.questionCoverage = questionBatches(question.questions).coverage;
+  // Keep the source available only to deterministic query execution. It is not
+  // serialized into model requests or persisted report metadata.
+  if (question) Object.defineProperty(question, "sourceDataset", { value: data });
   return { overall, question };
 }
 
@@ -82,10 +87,15 @@ export function prepareReport(input) {
   };
   for (const [index, dimension] of dimensionsFor(data).entries())
     snapshot.facts[`sourceDimension${index}Count`] = { label: `原始数据中${dimension.key}的不同取值数量`, value: new Set(data.rows.map(row => row[dimension.key])).size, unit: "类" };
-  snapshot.history = (Array.isArray(input.history) ? input.history : [])
+  const history = Array.isArray(input.questionHistory)
+    ? input.questionHistory.map(text => ({ role: "user", text }))
+    : Array.isArray(input.history) ? input.history : [];
+  snapshot.history = history
     .filter(m => ["user", "assistant"].includes(m?.role) && typeof m.text === "string")
-    .slice(-12).map(m => ({ role: m.role, text: m.text.slice(0, 1200) }));
-  snapshot.questions = snapshot.history.filter(m => m.role === "user").map(m => m.text).slice(-6);
+    .map(m => ({ role: m.role, text: m.text }));
+  snapshot.questions = snapshot.history.filter(m => m.role === "user").map(m => m.text);
+  if (snapshot.questions.some(text => text.length > 12000) || snapshot.questions.reduce((sum, text) => sum + text.length, 0) > 2000000)
+    throw new Error("用户问题历史超出支持范围，请分开分析。");
   // IDs from low-cardinality source dimensions remain real identities even
   // outside the current filter or when the user omits their alphabetic prefix.
   // They may be named in scope explanations, but their statistics are not added.

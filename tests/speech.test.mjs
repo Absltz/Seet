@@ -49,6 +49,9 @@ test("speech endpoint uses MiMo ASR protocol and returns transcription without c
   t.after(() => server.close());
   process.env.AI_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
   process.env.AI_API_KEY = "mock-speech-key";
+  // 这条用例专门验证旧协议兼容，不能再依赖默认供应商。
+  process.env.AI_MODEL = "mimo-v2.6-flash";
+  process.env.AI_ASR_MODEL = "mimo-v2.5-asr";
   const audio =
     "data:audio/wav;base64," +
     Buffer.from(encodeWav([new Float32Array(16000)], 16000)).toString("base64");

@@ -46,3 +46,13 @@ test("malformed persisted reports are rejected and older records remain compatib
   assert.throws(() => validateStoredReport({ ...stored, result: { ...stored.result, mode: "rules" } }));
   assert.equal(restoreReport({ key: stored.key, result: { pdf: "not base64" } }), null);
 });
+
+test('报告与问题专题保存实际调用的模型列表，重新打开仍可显示',()=>{
+ const models=['qwen3.8-flash','qwen3.8-max'];
+ const narrative={...metadata.narrative,model:models[0],models,questionSection:{...metadata.narrative,model:models[1],models:[models[1]]}};
+ const result={...metadata,model:models[0],models,narrative,bytes:new TextEncoder().encode('%PDF-1.4\n%%EOF')};
+ const loaded=restoreReport(validateStoredReport(serializeReport(reportKeyFor(workspace),result)));
+ assert.deepEqual(loaded.result.models,models);
+ assert.equal(loaded.result.narrative.model,models[0]);
+ assert.deepEqual(loaded.result.narrative.questionSection.models,[models[1]]);
+});

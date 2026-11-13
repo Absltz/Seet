@@ -1,0 +1,60 @@
+/* Fixed geometry keeps the read-only scroll window and column boundaries stable. */
+.table-wrap.data-table-virtual {
+  max-height: 300px;
+  overflow: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+}
+
+.data-table-virtual .data-table-grid {
+  min-width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table-virtual th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 38px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  line-height: 21px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.data-table-virtual tr[data-row-index],
+.data-table-virtual tr[data-row-index] > td {
+  height: 46px;
+}
+
+.data-table-virtual tr[data-row-index] > td {
+  min-width: 0;
+  max-width: none;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  line-height: 21px;
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.data-table-cell {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.data-table-virtual .data-table-spacer > td {
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  border: 0;
+  font-size: 0;
+  line-height: 0;
+  background: transparent;
+}

@@ -26,7 +26,7 @@ export async function requestReport(input, onProgress, signal) {
       if (!line.trim()) continue;
       const event = JSON.parse(line);
       if (event.type === "error") throw new Error(event.error);
-      if (event.type === "progress") onProgress(event);
+      if (event.type === "progress" || event.type === "model") onProgress(event);
       if (event.type === "result") result = event.result;
     }
     if (done) break;

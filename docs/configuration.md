@@ -8,16 +8,19 @@
 
 ## 配置文件
 
-后端从项目根目录 `.env` 加载变量。仓库已包含供评审使用的比赛专用配置；`.env.example` 是不含凭据的完整模板。请勿直接用空模板覆盖已配置文件。
+后端从项目根目录 `.env` 加载变量。当前仓库不附带密钥；先复制 `.env.example` 为 `.env`，再填写自己的配置。`.env` 和账号数据均不提交 Git。
 
 | 变量 | 默认值 / 示例 | 用途 |
 | --- | --- | --- |
-| `AI_API_KEY` | 比赛 `.env` 已配置 | MiMo API 密钥，文字、Agent、报告及语音共享 |
-| `AI_BASE_URL` | `https://api.xiaomimimo.com/v1` | 模型服务基础地址 |
-| `AI_MODEL` | `mimo-v2.6-flash` | 文字、Agent 与报告模型 |
-| `PORT` | `4173` | Express 端口 |
+| `AI_API_KEY` | 空，需自行填写 | 千问 API 密钥，文字、Agent、报告及语音共享 |
+| `AI_PROVIDER` | `qwen` | 当前模型供应商 |
+| `AI_BASE_URL` | `https://cn-beijing.maas.qianwenaiapi.com/compatible-mode/v1` | 模型服务基础地址 |
+| `AI_MODEL` | `qwen3.8-flash` | 文字、Agent 与报告模型 |
+| `AI_FALLBACK_MODELS` | `qwen3.7-flash,qwen3.8-max` | 主模型不可用时依序尝试，空值关闭回退；每个新任务重新首选主模型 |
+| `PORT` | `4373` | 本副本 Express 端口 |
 | `HOST` | `127.0.0.1` | 可选，监听地址，默认仅本机 |
-| `AI_ASR_MODEL` | `mimo-v2.5-asr` | 可选，语音识别模型 |
+| `AI_ASR_MODEL` | `qwen-audio-3.1-asr-flash` | 可选，语音识别模型 |
+| `AI_ASR_BASE_URL` | `https://maas.qianwenaiapi.com/api/v1` | 原生语音服务地址，与文字兼容端点分开 |
 | `USER_STORE` | 项目 `.data/users.json` | 可选，账号文件路径 |
 | `ANALYSIS_STORE` | 项目 `.data/analyses/` | 可选，分析记录目录 |
 | `SEET_EXTRA_FIXTURES` | 不设置 | 可选，仅测试时额外读取该目录中的 XLSX |
@@ -28,20 +31,24 @@
 
 ```bash
 npm ci
+cp .env.example .env
+# 填写 .env 中的 AI_API_KEY
 npm run build
 npm start
 ```
 
-浏览器访问 `http://127.0.0.1:4173/`。如更改 `PORT`，使用相应端口。开发时 `vite.config.js` 的 API 代理固定为 4173，如更改后端端口，需同步修改代理。
+浏览器访问 `http://127.0.0.1:4373/`。开发前端位于 `http://127.0.0.1:5373/`，API 代理到 4373；如更改后端端口，需同步修改代理。
 
 首次使用需注册账号，账号和分析记录保存在当前运行环境中。Windows 一键入口为 `启动见数.cmd`，会安装缺失依赖并构建，再启动服务和打开网页。
 
 ## 运行检查
 
-- `/api/status` 返回服务是否配置 AI 及模型名称，不返回密钥。
+- `/api/status` 返回服务是否配置 AI、供应商、文字及语音模型名称，不返回密钥。
 - `npm test` 先自动构建前端，再使用临时数据目录与模拟供应商执行测试，不依赖现有 `.data`。
 - `npm run build` 生成 `dist/`，Express 从该目录提供页面。
 - `npm run dev` 只启动前端开发服务，后端仍需另开终端运行。
+
+文本提取和 Agent 关闭思考；报告提纲启用有限预算的思考，正文使用 JSON 输出。报告继续检查统计事实、图表编号与引用，不能因更换模型而跳过校验。语音上传 Base64 WAV，走千问原生同步接口，识别后先填回输入框，由用户确认发送。协议参考[结构化输出](https://platform.qianwenai.com/docs/developer-guides/text-generation/structured-output)与[语音 HTTP 接口](https://platform.qianwenai.com/docs/api-reference/speech-recognition/qwen-audio-asr/http-api)。
 
 ## 常见问题
 

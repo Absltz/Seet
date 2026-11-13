@@ -30,6 +30,7 @@
     "react-markdown": "^10.1.0",
     "read-excel-file": "^9.3.12",
     "recharts": "^3.10.1",
+    "remark-gfm": "^4.0.1",
     "three": "^0.187.0",
     "zod": "^4.6.7"
   },

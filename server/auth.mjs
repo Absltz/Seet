@@ -9,9 +9,10 @@ import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const scrypt = promisify(scryptCallback),
-  cookieName = "jianshu_session";
+const scrypt = promisify(scryptCallback);
 export function authRouter() {
+  // 本地多个副本共用主机时，用独立 Cookie 名称避免相互覆盖登录状态。
+  const cookieName = process.env.SESSION_COOKIE || "jianshu_session";
   const router = Router();
   const file =
     process.env.USER_STORE ||

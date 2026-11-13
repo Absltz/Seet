@@ -1,0 +1,79 @@
+.chart-selection-bar{margin:16px 0 19px;padding:13px 15px;background:var(--raised);border:1px solid var(--line);border-radius:12px;color:var(--ink)}
+.chart-selection-top,.chart-selection-instruction,.chart-selection-actions,.chart-selection-result{display:flex;align-items:center;gap:9px}
+.chart-selection-top{justify-content:space-between;flex-wrap:wrap;gap:10px}
+.chart-selection-instruction{font-size:13px;flex-wrap:wrap}
+.chart-selection-instruction>svg{color:var(--accent)}
+.chart-selection-instruction>strong{font-weight:600}
+.chart-selection-instruction>span{font-size:12px;color:var(--muted)}
+.chart-selection-result{justify-content:space-between;gap:16px;font-size:12px;color:var(--muted);margin-top:8px}
+.chart-selection-result>span:first-child{color:var(--accent);overflow-wrap:anywhere}
+.chart-selection-result>span:last-child{white-space:nowrap}
+.chart-selection-picker{position:relative;font-size:12px}
+.chart-selection-picker>summary{list-style:none;display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:6px;cursor:pointer;color:var(--accent);background:var(--surface);border:1px solid var(--line)}
+.chart-selection-picker>summary::-webkit-details-marker{display:none}
+.chart-selection-popover{position:absolute;right:0;top:calc(100% + 8px);width:280px;max-width:70vw;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 28px #153f3014;z-index:12}
+.chart-selection-search{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:6px;padding:7px 9px;color:var(--muted)}
+.chart-selection-search input{min-width:0;width:100%;padding:0;border:0;background:transparent;color:var(--ink);font:inherit;outline:none}
+.chart-selection-options{display:grid;max-height:224px;overflow-y:auto;margin-top:8px;gap:2px}
+.chart-selection-options button{display:flex;align-items:center;gap:9px;padding:8px 7px;text-align:left;background:transparent;border:0;border-radius:5px;font:inherit;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+.chart-selection-options button:hover,.chart-selection-options button[aria-pressed=true]{background:var(--raised);color:var(--accent)}
+.chart-choice-box{display:grid;place-items:center;flex:0 0 15px;width:15px;height:15px;border:1px solid var(--line);border-radius:3px;font-size:11px}
+.chart-selection-options button[aria-pressed=true] .chart-choice-box{background:var(--accent);border-color:var(--accent);color:white}
+.chart-selection-popover p{margin:8px 0 0;font-size:12px;color:var(--muted)}
+.chart-selection-reset{display:flex;align-items:center;gap:5px;padding:6px 8px;border:0;background:transparent;color:var(--accent);font-size:12px;cursor:pointer}
+.chart-selection-error{color:#a13f30;font-size:12px;margin:8px 0 0}
+.chart-date-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chart-date-fields label{display:grid;gap:6px;color:var(--muted)}
+.chart-date-fields select{width:100%;min-width:0;padding:8px 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--ink);font:inherit}
+.chart-time-range{margin:12px 0 4px;padding:12px 10px 0;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.chart-range-caption{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--muted);padding:0 2px}
+.chart-range-caption strong{font-weight:500;color:var(--ink)}
+.chart-range-caption span{color:var(--accent)}
+.chart-range-caption small{margin-left:auto;font-size:11px}
+.chart-range-preview{height:55px;width:100%;min-width:0;user-select:none}
+.chart-scroll{overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;scrollbar-color:var(--line) transparent;overscroll-behavior-x:contain}
+.chart-stage{min-width:100%}
+.chart-scroll:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.chart-scroll-hint{margin:6px 0 0;color:var(--muted);font-size:11px}
+.chart-display-note{margin-top:10px;padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:var(--raised);color:var(--ink);font-size:12px}
+.chart-time-range [tabindex]:focus{outline:none}
+.chart-time-range .recharts-brush-traveller:focus-visible{outline:2px solid var(--chart-2);outline-offset:2px;border-radius:3px}
+.chart-time-range .recharts-brush-traveller:focus-visible rect{stroke:var(--accent);stroke-width:2}
+.chart-interactive .recharts-bar-rectangle,.chart-interactive .recharts-pie-sector{cursor:pointer}
+.chart-interactive [tabindex]:focus:not(:focus-visible){outline:none}
+.chart-interactive [tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.chart-interactive .recharts-bar-rectangle path,.chart-interactive .recharts-pie-sector path{transition:fill-opacity .16s ease,stroke .16s ease}
+.chart-dot-target{cursor:pointer;outline:none}
+.chart-dot-target:focus-visible circle:last-child{stroke:var(--ink);stroke-width:3}
+.pie-legend button{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink);font:inherit;font-size:12px;cursor:pointer}
+.pie-legend button[aria-pressed=true]{border-color:var(--accent);background:var(--raised);color:var(--accent)}
+.pie-legend button i{display:block;width:9px;height:9px;border-radius:2px;flex-shrink:0}
+.chart-selection-bar button:focus-visible,.chart-selection-bar summary:focus-visible,.pie-legend button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.lib-board-card .chart-selection-instruction>span{display:none}
+.lib-board-card .chart-selection-bar{margin:4px 0 10px;padding:10px 12px}
+.lib-board-card .chart-selection-top{gap:7px}
+@media(prefers-reduced-motion:reduce){.chart-interactive .recharts-bar-rectangle path,.chart-interactive .recharts-pie-sector path{transition:none}}
+
+/* 工作台的设置与图表筛选共用一个面板，只展开用户当前需要的控件。 */
+.canvas-workbench .chart-control-bar{margin:16px 0 16px;padding:12px 14px;border-radius:10px}
+.chart-control-bar .chart-selection-top{justify-content:flex-start;gap:10px}
+.chart-control-inputs{display:contents}
+.chart-control-inputs>.primary-metric{order:1}
+.chart-control-bar .chart-selection-actions{order:2}
+.chart-control-inputs>.analysis-settings{order:3;margin-left:auto}
+.chart-control-bar .metric-select{display:flex;align-items:center;gap:8px}
+.chart-control-bar .primary-metric select{background:var(--surface);max-width:230px}
+.chart-control-bar .analysis-settings>summary,.chart-control-bar .chart-selection-picker>summary{background:var(--surface);min-height:34px}
+.chart-control-bar .advanced-controls{left:auto;right:0;min-width:280px;z-index:14}
+.chart-control-bar .advanced-controls>.text-button{justify-self:end;display:flex;gap:7px;align-items:center;margin:0;padding:5px 0;font-size:12px}
+.chart-control-bottom{display:flex;align-items:center;gap:9px 12px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+.chart-control-context{white-space:nowrap;font-size:11px}
+.canvas-workbench .chart-control-bottom .active-filters{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0;font-size:11px;min-width:0}
+.chart-control-bottom .active-filters>span{background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:2px 7px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+.chart-control-bottom .active-filters>button{white-space:nowrap;font-size:11px;padding:2px 4px}
+.chart-control-bar .chart-selection-result{margin-top:0;margin-left:auto;font-size:11px;white-space:nowrap}
+.chart-control-bar .chart-selection-result>span{color:var(--muted)}
+.chart-control-bar .chart-selection-popover{text-align:left;right:auto;left:0}
+.chart-control-bar .chart-picker-help{margin:0 0 10px;font-size:11px;line-height:1.7}
+.chart-control-bar .chart-selection-reset{border-top:1px solid var(--line);width:100%;margin-top:8px;padding:10px 4px 2px;justify-content:flex-start}
+.chart-control-bar .chart-selection-picker:focus-within{z-index:15}

@@ -2,20 +2,6 @@
  * Desktop arithmetic: (viewport - 32px outer - 12px gutter) × 40% / 60%.
  * This file is deliberately scoped so login, homepage and report studio retain
  * their existing presentation and all analytical state stays in App. */
-.canvas-workbench {
-  --ground: #f5f4ee;
-  --surface: #fff;
-  --raised: #f6f7f3;
-  --ink: #243d33;
-  --muted: #647168;
-  --accent: #215847;
-  --accent-hover: #184433;
-  --accent-soft: #edf2e9;
-  --line: #e5e8e1;
-  --control: #ccd6cb;
-  background: var(--ground);
-  color: var(--ink);
-}
 .canvas-workbench .topbar {
   height: 72px;
   padding: 0 28px;
@@ -37,6 +23,7 @@
   padding: 0 16px 16px;
 }
 .canvas-workbench .workspace.sidebar-closed { grid-template-columns: minmax(0, 1fr); }
+.canvas-workbench .workspace[data-sidebar-motion] > .sidebar { will-change: opacity; }
 .canvas-workbench .sidebar, .canvas-workbench .main-sheet {
   position: relative;
   top: auto;
@@ -92,7 +79,7 @@
 .canvas-workbench .message-markdown h1, .canvas-workbench .message-markdown h2, .canvas-workbench .message-markdown h3 { font-size: 15px; margin-top: 16px; }
 .canvas-workbench .message-markdown ul, .canvas-workbench .message-markdown ol { padding-left: 22px; }
 .canvas-workbench .sidebar .composer {
-  margin: 0 16px;
+  margin: 0 16px 16px;
   width: calc(100% - 32px);
   border: 1px solid var(--accent);
   outline: 0;
@@ -102,7 +89,6 @@
   background: #fff;
   box-shadow: 0 3px 12px rgb(36 61 51 / 4%);
 }
-.canvas-workbench .sidebar .composer:focus-within { box-shadow: 0 0 0 2px rgb(33 88 71 / 12%); }
 .canvas-workbench .sidebar .composer textarea { height: 76px; min-height: 76px; max-height: 150px; padding: 14px 16px 4px; font-size: 14px; line-height: 1.7; }
 .canvas-workbench .sidebar .compose-tools { gap: 9px; padding: 4px 10px 10px; min-height: 44px; }
 .canvas-workbench .sidebar .compose-tools .composer-model-status { font-size: 11px; }
@@ -110,7 +96,6 @@
 .canvas-workbench .sidebar .record-save-status { border-top: 1px solid var(--line); padding: 7px 14px; font-size: 11px; background: #fafbf8; }
 .canvas-workbench .sidebar .record-save-status button { font-size: 11px; }
 .canvas-workbench .sidebar .send-button, .canvas-workbench .sidebar .voice-button { width: 36px; height: 36px; min-height: 36px; }
-.canvas-workbench .sidebar .privacy-note { display: block; font-size: 11px; text-align: center; padding: 10px 10px 12px; margin: 0; }
 .canvas-workbench .processing { padding: 8px 0; font-size: 12px; color: var(--accent); }
 .canvas-workbench .tool-trace { border: 0; padding-top: 7px; margin-top: 9px; }
 .canvas-workbench .tool-trace summary { font-size: 12px; }
@@ -189,11 +174,10 @@
 .canvas-workbench .empty-state .primary-button { min-height: 42px; border-radius: 8px; padding: 10px 18px; font-size: 13px; }
 .canvas-workbench .empty-state > .text-button { font-size: 12px; }
 .empty-formats { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; color: var(--muted); font-size: 11px; margin-top: 14px; }
-.canvas-workbench .examples-tray { padding-bottom: 20px; margin-bottom: 22px; }
-.canvas-workbench .example-options { gap: 10px; }
-.canvas-workbench .example-options button { background: var(--raised); border-radius: 8px; padding: 14px; }
 .canvas-workbench .report-preview-panel { padding-top: 10px; }
 .canvas-workbench .data-panel .table-wrap { max-height: calc(100dvh - 330px); }
+.canvas-workbench section.source-preview .table-wrap { max-height: 300px; overflow: auto; overscroll-behavior: contain; }
+.canvas-workbench section.source-preview .table-wrap th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: 0 1px 0 var(--line); }
 .canvas-workbench :is(button, summary, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .canvas-workbench ::selection { background: #215847; color: #fff; }
 
@@ -240,10 +224,9 @@
   .canvas-workbench .thread-context { padding-inline: 16px; }
   .canvas-workbench .sidebar .conversation { padding: 18px 16px 14px; }
   .canvas-workbench .message p, .canvas-workbench .message li { font-size: 14px; }
-  .canvas-workbench .sidebar .composer { margin: 0 12px; width: calc(100% - 24px); }
+  .canvas-workbench .sidebar .composer { margin: 0 12px 12px; width: calc(100% - 24px); }
   .canvas-workbench .sidebar .composer textarea { height: 62px; min-height: 62px; max-height: 100px; }
   .canvas-workbench .sidebar .compose-tools .composer-model-status { display: flex; font-size: 11px; }
-  .canvas-workbench .sidebar .privacy-note { display: block; font-size: 11px; padding-bottom: 10px; }
   .canvas-workbench .thread-heading-actions .new-analysis { min-height: 44px; }
   .canvas-workbench .thread-heading-actions .icon-button { min-height: 44px; width: 34px; }
   .canvas-workbench .sidebar .send-button, .canvas-workbench .sidebar .voice-button { min-height: 44px; width: 44px; height: 44px; }

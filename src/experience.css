@@ -474,18 +474,19 @@ body {
   color: var(--experience-muted);
   font-size: 13px;
 }
-.home-scroll-cue {
+.home-experience .home-scroll-cue {
   display: grid;
   place-items: center;
   width: 46px;
   height: 46px;
   flex-shrink: 0;
-  border: 1px solid var(--experience-stage);
+  border: 0;
   border-radius: 50%;
-  color: var(--experience-green);
-  background: var(--experience-stage);
+  padding: 0;
+  color: var(--experience-white);
+  background: var(--experience-green);
 }
-.home-scroll-cue:hover {
+.home-experience .home-scroll-cue:hover {
   background: var(--experience-green);
   color: var(--experience-white);
 }
@@ -1519,18 +1520,9 @@ body {
 .auth-submit-label > span { grid-area: 1 / 1; transition: opacity .25s ease, transform .35s ease; }
 .auth-submit-label > [aria-hidden="true"] { opacity: 0; transform: translateY(5px); visibility: hidden; }
 .auth-submit-label > [aria-hidden="false"] { opacity: 1; transform: translateY(0); }
-.home-scroll-cue { display: flex; width: auto; height: auto; gap: 17px; padding: 9px 10px 9px 20px; border-color: #d4ded1; border-radius: 40px; background: transparent; }
-.scroll-cue-copy { text-align: right; font-size: 14px; color: var(--experience-green); line-height: 1.5; }
-.scroll-cue-copy > span { display: block; font-size: 11px; color: var(--experience-muted); }
-.scroll-cue-arrow { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: var(--experience-green); color: #fff; }
-.home-scroll-cue:hover { background: var(--experience-stage); color: var(--experience-green); }
 @media (max-width: 760px) {
   .home-hero-bottom { align-items: end; gap: 10px; }
   .home-hero-bottom > p { max-width: 50%; font-size: 11px; }
-  .home-scroll-cue { gap: 8px; padding: 6px 7px 6px 12px; }
-  .scroll-cue-copy { font-size: 12px; }
-  .scroll-cue-copy > span { display: none; }
-  .scroll-cue-arrow { width: 36px; height: 36px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .auth-copy-stack > div, .auth-tab-indicator, .auth-hint-reveal, .auth-submit-label > span { transition: none; }

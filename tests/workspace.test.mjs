@@ -74,6 +74,14 @@ test("home, help, login and history pages load directly", async (t) => {
   }
 });
 
+test("independent preview uses its own session cookie", async (t) => {
+  const { base } = await start(t, { SESSION_COOKIE: "seet_preview2_session" });
+  const cookie = apiCookies.get(base);
+  assert.match(cookie, /^seet_preview2_session=/);
+  const response = await fetch(base + "/api/auth/me", { headers: { Cookie: cookie } });
+  assert.equal((await response.json()).user.username, "api_test_user");
+});
+
 test("register, login, reject incorrect password, session and logout", async (t) => {
   const { base, file } = await start(t);
   const credentials = { username: "reviewer_test", password: "Demo-test-2026" };
@@ -217,4 +225,15 @@ test("provider errors and truncated output return actionable messages without cr
   r = await post(base, "/api/chat", { text: "甲收入100元" });
   assert.equal(r.status, 502);
   assert.match((await r.json()).error, /截断/);
+});
+
+test('对话模型403权限拒绝与正常语音配置独立，返回真实可操作的错误类别',async t=>{
+ const upstream=http.createServer((req,res)=>{res.writeHead(403,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{code:'AccessDenied.Unpurchased',message:'sensitive-provider-detail'}}));});
+ await new Promise(resolve=>upstream.listen(0,'127.0.0.1',resolve));t.after(()=>upstream.close());
+ const {base}=await start(t,{AI_API_KEY:'mock-private-key',AI_MODEL:'qwen3.8-flash',AI_PROVIDER:'qwen',AI_BASE_URL:`http://127.0.0.1:${upstream.address().port}/v1`});
+ const response=await post(base,'/api/agent',{text:'包括哪些城市',owner:'api_test_user',dataset:{title:'城市',metrics:[{key:'收入',unit:'元'}],rows:[{name:'郑州',收入:100}]}});
+ const events=(await response.text()).trim().split('\n').map(JSON.parse),failure=events.find(e=>e.type==='error');
+ assert.equal(failure.code,'model_permission');assert.match(failure.error,/qwen3.8-max/);assert.match(failure.error,/权限/);assert.doesNotMatch(failure.error,/检查网络|sensitive|mock-private/);
+ assert.deepEqual(events.filter(e=>e.type==='model').map(e=>e.model),['qwen3.8-flash','qwen3.7-flash','qwen3.8-max']);
+ assert.ok(!events.some(e=>e.type==='result'));
 });

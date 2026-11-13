@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomUUID} from 'node:crypto';
+import {findSourceSheet} from '../src/sheets/source.mjs';
+import {validateDataset} from '../src/data.mjs';
+const projectId=randomUUID(),id=randomUUID(),data={title:'收入',projectId,dimensions:[{key:'月份',type:'text'}],metrics:[{key:'收入',unit:'元'}],rows:[{name:'一月',月份:'一月',收入:100}]};
+const sheet={id,table:{title:'原始收入',projectId,headers:['月份','收入（元）'],rows:[['一月',100]]}};
+test('优先明确的原表编号，拒绝其他项目和其他账号不存在的原表',()=>{assert.equal(findSourceSheet([sheet],{...data,sourceSheetId:id}),sheet);assert.equal(findSourceSheet([sheet],{...data,sourceSheetId:id,projectId:randomUUID()}),null);assert.equal(findSourceSheet([],{...data,sourceSheetId:id}),null);assert.equal(findSourceSheet([sheet],{...data,sourceSheetId:randomUUID()}),null)});
+test('旧数据仅在完整内容唯一对应时打开原表，不按文件名猜测',()=>{assert.equal(findSourceSheet([sheet],data),sheet);assert.equal(findSourceSheet([sheet,{...sheet,id:randomUUID()}],data),null);assert.equal(findSourceSheet([{...sheet,table:{...sheet.table,rows:[['一月',999]]}}],data),null)});
+test('AI 原列映射和原表编号通过数据校验保留；非法映射不能保存',()=>{const sourceColumns=[{index:0,header:'月份',key:'月份'},{index:1,header:'收入（元）',key:'收入'}];assert.deepEqual(validateDataset({...data,sourceSheetId:id,sourceColumns}).sourceColumns,sourceColumns);assert.equal(validateDataset({...data,sourceSheetId:id}).sourceSheetId,id);assert.throws(()=>validateDataset({...data,sourceColumns:[...sourceColumns,sourceColumns[0]]}),/映射/);assert.throws(()=>validateDataset({...data,sourceColumns:[{index:1,header:'收入',key:'未识别字段'}]}),/映射/)});

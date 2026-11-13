@@ -130,7 +130,7 @@ export function LoginShell({ children, navigate }) {
         {children}
         <div className="login-entry-foot">
           <span>放石一马团队</span>
-          <span>思考由小米 MiMo 提供支持</span>
+          <span>思考由千问提供支持</span>
         </div>
       </section>
     </main>
@@ -297,11 +297,14 @@ export function HomePage({ navigate, user, accountControls }) {
           </RouteLink>
           <nav aria-label="主页导航">
             <SectionLink href="#report">产品功能</SectionLink>
-            <RouteLink to="/history" navigate={navigate}>
-              分析记录
+            <RouteLink to="/datasets" navigate={navigate}>
+              数据集库
             </RouteLink>
-            <RouteLink to="/help" navigate={navigate}>
-              使用说明
+            <RouteLink to="/boards" navigate={navigate}>
+              分析看板
+            </RouteLink>
+            <RouteLink to="/reports" navigate={navigate}>
+              报告中心
             </RouteLink>
           </nav>
           <div className="home-header-actions">{accountControls}</div>
@@ -344,8 +347,7 @@ export function HomePage({ navigate, user, accountControls }) {
                 href="#report"
                 aria-label="向下查看分析报告示例"
               >
-                <span className="scroll-cue-copy">向下探索<span>看看数据如何变成发现</span></span>
-                <span className="scroll-cue-arrow"><ArrowDown size={23} aria-hidden="true" /></span>
+                <ArrowDown size={23} aria-hidden="true" />
               </SectionLink>
             </div>
           </section>
@@ -410,7 +412,7 @@ export function HomePage({ navigate, user, accountControls }) {
                 </li>
                 <li>
                   <Check size={18} aria-hidden="true" />
-                  保存到你的分析记录
+                  与数据一起保存在数据集库
                 </li>
               </ul>
             </div>
@@ -542,7 +544,7 @@ export function HomePage({ navigate, user, accountControls }) {
       <footer className="home-footer experience-container">
         <Brand />
         <p>放石一马团队 / 见数 Seet</p>
-        <span>思考由小米 MiMo 提供支持</span>
+        <span>思考由千问提供支持</span>
       </footer>
     </div>
   );

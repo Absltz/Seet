@@ -1,4 +1,9 @@
 const forbidden = new Set(['__proto__','constructor','prototype','name']);
+export function projectMetadata(value) {
+ if(value?.projectId===undefined)return {};
+ if(typeof value.projectId!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(value.projectId))throw new Error('数据项目编号无效。');
+ return {projectId:value.projectId.toLowerCase()};
+}
 export function validateDataset(input) {
  if (!input || !Array.isArray(input.metrics) || !Array.isArray(input.rows) || input.metrics.length<1 || input.metrics.length>32 || input.rows.length<1 || input.rows.length>50000) throw new Error('需要 1–50000 行数据、1–32 个数值指标。');
  if(input.metrics.some(m=>!m||typeof m.key!=='string'||(m.unit!==undefined&&typeof m.unit!=='string'))) throw new Error('指标名称和单位必须是文本。');
@@ -13,7 +18,14 @@ export function validateDataset(input) {
   for(const m of metrics) { const v=r[m.key]; if(v!==null && (typeof v!=='number'||!Number.isFinite(v)||Math.abs(v)>1e15)) throw new Error(`“${m.key}”必须是有限数字或空值。`); row[m.key]=v; }
   return row;
  });
- return {title:String(input.title||'我的数据分析').slice(0,80),metrics,rows,...(dimensions.length?{dimensions}:{})};
+ const source={};
+ if(input.sourceSheetId!==undefined)source.sourceSheetId=projectMetadata({projectId:input.sourceSheetId}).projectId;
+ if(input.sourceColumns!==undefined){
+  const fields=new Set([...dimensions.map(d=>d.key),...metrics.map(m=>m.key),...(!dimensions.length?['name']:[])]);
+  if(!Array.isArray(input.sourceColumns)||input.sourceColumns.length>56||input.sourceColumns.some(c=>!c||!Number.isInteger(c.index)||c.index<0||c.index>=56||typeof c.header!=='string'||!c.header||c.header.length>60||!fields.has(c.key))||new Set(input.sourceColumns.map(c=>c.index)).size!==input.sourceColumns.length||new Set(input.sourceColumns.map(c=>c.key)).size!==input.sourceColumns.length)throw new Error('AI 字段与原始列的映射无效。');
+  source.sourceColumns=input.sourceColumns.map(({index,header,key})=>({index,header,key}));
+ }
+ return {title:String(input.title||'我的数据分析').slice(0,80),metrics,rows,...(dimensions.length?{dimensions}:{}),...projectMetadata(input),...source};
 }
 function numberCell(raw) {
  if(raw===null||raw===undefined||String(raw).trim()===''||/^(—|-|N\/A|null)$/i.test(String(raw).trim())) return {value:null,unit:''};
@@ -88,8 +100,3 @@ export function csvExport(d) {
  const dimensions=d.dimensions||[];
  return '\uFEFF'+[[...(dimensions.length?dimensions.map(x=>x.key):['分类']),...d.metrics.map(m=>m.key+(m.unit?`（${m.unit}）`:''))],...d.rows.map(r=>[...(dimensions.length?dimensions.map(x=>r[x.key]):[r.name]),...d.metrics.map(m=>r[m.key])])].map(r=>r.map(cell).join(',')).join('\r\n');
 }
-export const samples=[
- {id:'coffee',title:'一周咖啡销售',description:'从一周记录，看见每日变化',source:'演示数据',metrics:[{key:'销量',unit:'杯'},{key:'收入',unit:'元'}],rows:[{name:'周一',销量:120,收入:2160},{name:'周二',销量:150,收入:2700},{name:'周三',销量:90,收入:1620},{name:'周四',销量:180,收入:3240},{name:'周五',销量:210,收入:3780},{name:'周六',销量:280,收入:5040},{name:'周日',销量:230,收入:4140}]},
- {id:'clubs',title:'社团活动复盘',description:'比较报名与到场人数',source:'演示数据',metrics:[{key:'报名',unit:'人'},{key:'到场',unit:'人'}],rows:[{name:'摄影社',报名:80,到场:62},{name:'篮球社',报名:120,到场:108},{name:'读书会',报名:50,到场:45}]},
- {id:'budget',title:'活动预算分布',description:'了解每一笔支出的占比',source:'演示数据',metrics:[{key:'预算',unit:'元'}],rows:[{name:'场地',预算:1200},{name:'物料',预算:680},{name:'宣传',预算:320},{name:'餐饮',预算:800},{name:'其他',预算:200}]}
-];

@@ -25,8 +25,12 @@ export function departForWorkbench(surface, commit) {
     if (source.finished) return;
     source.finished = true;
     clearTimeout(deadline);
-    const target = source.target?.isConnected ? source.target : document.querySelector(".workbench-core-canvas");
-    if (target) source.runtime.finishCore(target);
+    const target = source.target || document.querySelector(".workbench-core-canvas");
+    if (target) {
+      source.runtime.finishCore(target);
+      if (source.options) source.runtime.attachCore(target, source.options);
+      if (!target.isConnected) source.runtime.suspendCore();
+    }
     else source.runtime.cancel();
     if (source.surface?.isConnected) gsap.set(source.surface, { clearProps: "opacity" });
     layer.remove();
@@ -73,6 +77,15 @@ export function departForWorkbench(surface, commit) {
     window.removeEventListener("resize", settle);
     document.removeEventListener("visibilitychange", onVisibility);
   };
+  source.cancel = () => {
+    timeline.kill();
+    source.runtime.cancel();
+    source.finished = true;
+    layer.remove();
+    if (source.surface?.isConnected) gsap.set(source.surface, { clearProps: "opacity" });
+    if (pending === source) pending = null;
+    cleanup();
+  };
   timeline.eventCallback("onComplete", () => { finish(); cleanup(); });
   // 导航提交会卸载旧的路由动效；接力仍由这个独立时间线完成。
   return { kill() { if (!committed) { timeline.kill(); source.runtime.cancel(); layer.remove(); if (pending === source) pending = null; cleanup(); } } };
@@ -82,13 +95,19 @@ export async function mountWorkbenchCore(host, options) {
   if (pending && !pending.finished) {
     const source = pending;
     source.target = host;
-    return { dispose() {
-      // StrictMode 的试挂载会马上换成新的目标，不提前销毁在飞行中的画布。
-      queueMicrotask(() => {
-        if (source.target === host && !host.isConnected) source.runtime.cancel();
-      });
-      if (source.finished) source.runtime.dispose();
-    } };
+    return {
+      isCoreAvailable() { return source.runtime.isCoreAvailable(); },
+      attachCore(nextHost, nextOptions) {
+        source.target = nextHost;
+        source.options = nextOptions;
+        if (source.finished) source.runtime.attachCore(nextHost, nextOptions);
+      },
+      suspendCore() { if (source.finished) source.runtime.suspendCore(); },
+      dispose() {
+        if (source.finished) source.runtime.dispose();
+        else source.cancel();
+      },
+    };
   }
   const { createDataIsland } = await import("./components/dataIsland.mjs");
   if (!host.isConnected) return null;

@@ -19,6 +19,7 @@ test("authenticated records are durable and isolated across accounts", async (t)
       PORT: String(port),
       USER_STORE: path.join(temp, "users.json"),
       ANALYSIS_STORE: path.join(temp, "records"),
+      LIBRARY_STORE:path.join(temp,"library"),SHEETS_STORE:path.join(temp,"sheets"),
       AI_API_KEY: "",
       AI_MODEL: "",
     },
@@ -83,7 +84,7 @@ test("authenticated records are durable and isolated across accounts", async (t)
   const id = "11111111-1111-4111-8111-111111111111";
   const reportResponse = await req("/api/report", "POST", { ...workspace, owner: "records_a" }, a);
   const reportEvents = (await reportResponse.text()).trim().split("\n").map(line => JSON.parse(line));
-  assert.ok(reportEvents.some(e => e.type === "error" && e.error.includes("MiMo")));
+  assert.ok(reportEvents.some(e => e.type === "error" && e.error.includes("千问")));
   assert.ok(!reportEvents.some(e => e.type === "result"));
   const statistical = await req("/api/report", "POST", { ...workspace, owner: "records_a", allowStatistical: true }, a);
   const statisticalEvents = (await statistical.text()).trim().split("\n").map(line => JSON.parse(line));
@@ -91,6 +92,7 @@ test("authenticated records are durable and isolated across accounts", async (t)
   assert.equal(reportResult.mode, "rules");
   assert.ok(reportResult.narrative.answer.includes("统计"));
   assert.equal(Buffer.from(reportResult.pdf, "base64").subarray(0, 5).toString(), "%PDF-");
+  workspace.questionHistory=Array.from({length:125},(_,i)=>`第${i+1}个完整用户问题`);
   workspace.report = { key: reportKeyFor(workspace), result: reportResult };
   let r = await req("/api/analyses/" + id, "PUT", { workspace }, a);
   assert.equal(r.status, 200);
@@ -107,6 +109,7 @@ test("authenticated records are durable and isolated across accounts", async (t)
     await (await req("/api/analyses/" + id, "GET", null, a)).json()
   ).record;
   assert.equal(restored.workspace.chart, "pie");
+  assert.deepEqual(restored.workspace.questionHistory,workspace.questionHistory);
   assert.equal(restored.workspace.dataset.rows[0].销量, 120);
   assert.deepEqual(restored.workspace.view, workspace.view);
   assert.equal(restored.workspace.report.result.pdf, reportResult.pdf);
@@ -151,13 +154,20 @@ test("authenticated records are durable and isolated across accounts", async (t)
     headers: { Cookie: b, "X-Workspace-Owner": "records_a" },
   });
   assert.equal(mismatch.status, 409);
-  assert.equal((await req('/api/analyses/'+id,'DELETE',{},b)).status,200);
+  const deleteGroup = async (owner,cookie) => {
+    const plan=await (await req('/api/assets/preview-delete','POST',{owner,kind:'analysis',id},cookie)).json();
+    const r=await req('/api/assets/delete','POST',{owner,kind:'analysis',id,token:plan.token},cookie);
+    assert.equal(r.status,200);return r.json();
+  };
+  assert.equal((await req('/api/analyses/'+id,'DELETE',{},b)).status,409);
+  await deleteGroup('records_b',b);
   assert.equal((await req('/api/analyses/'+id,'GET',null,a)).status,200);
   assert.equal((await req('/api/analyses/'+id,'GET',null,b)).status,404);
-  assert.equal((await req('/api/analyses/'+id,'DELETE',{},a)).status,200);
+  const deleted=await deleteGroup('records_a',a);
   assert.equal((await (await req('/api/analyses','GET',null,a)).json()).records.length,0);
   assert.equal((await req('/api/analyses/'+id,'PUT',{workspace},a)).status,409);
-  assert.equal((await req('/api/analyses/'+id+'/restore','POST',{},a)).status,200);
+  assert.equal((await req('/api/analyses/'+id+'/restore','POST',{},a)).status,409);
+  assert.equal((await req('/api/assets/restore','POST',{owner:'records_a',deletionId:deleted.deletionId},a)).status,200);
   assert.equal((await req('/api/analyses/'+id,'GET',null,a)).status,200);
   const recovered = (await (await req('/api/analyses/'+id,'GET',null,a)).json()).record;
   assert.equal(recovered.workspace.report.result.pdf, reportResult.pdf);
@@ -171,4 +181,15 @@ test("authenticated records are durable and isolated across accounts", async (t)
   const afterRestart = (await (await req("/api/analyses/" + id, "GET", null, afterRestartLogin.headers.get("set-cookie"))).json()).record;
   assert.equal(afterRestart.workspace.report.result.pdf, reportResult.pdf);
   assert.equal(afterRestart.workspace.report.result.createdAt, reportResult.createdAt);
+  // Raw-only imports must remain restorable before any paid AI call succeeds.
+  const sourceId='22222222-2222-4222-8222-222222222222';
+  const currentCookie=afterRestartLogin.headers.get('set-cookie');
+  const rawOnly={...workspace,dataset:null,draft:null,view:null,report:null,source:{sheetId:sourceId,projectId:sourceId,title:'待分析原表'}};
+  assert.equal((await req('/api/analyses/'+sourceId,'PUT',{workspace:rawOnly},currentCookie)).status,200);
+  const rawRestored=(await (await req('/api/analyses/'+sourceId,'GET',null,currentCookie)).json()).record.workspace;
+  assert.deepEqual(rawRestored.source,rawOnly.source);
+  assert.equal(rawRestored.dataset,null);
+  for(const source of ['invalid',[],{}, {sheetId:'invalid'}]){
+    assert.equal((await req('/api/analyses/'+sourceId,'PUT',{workspace:{...rawOnly,source}},currentCookie)).status,400);
+  }
 });

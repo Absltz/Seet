@@ -23,7 +23,10 @@ export function usePageMotion(page) {
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     )
       return;
-    const surface = document.getElementById("root")?.firstElementChild;
+    // 内页只淡入内容，持续存在的页签不能随整个页面闪烁。
+    const frame = document.getElementById("root")?.firstElementChild;
+    const surface = frame?.classList.contains("workspace-chrome")
+      ? frame.querySelector(".workspace, main, .auth-loading") : frame;
     if (!surface) return;
     const context = gsap.context(() => {
       gsap.fromTo(

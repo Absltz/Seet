@@ -4,10 +4,11 @@ export function reportKeyFor(workspace) {
   const data = workspace.dataset, dimensions = data?.dimensions || [], metrics = data?.metrics || [];
   const view = workspace.view ? [workspace.view.groupBy || "", workspace.view.granularity || "none", workspace.view.aggregation || "auto", (workspace.view.filters || []).map(f => [f.field, f.op, f.value])] : null;
   const content = JSON.stringify([
-    "overall-report-with-question-section-v1",
+    "overall-report-all-user-concerns-v2",
     data ? [data.title, data.source?.slice(0, 300) || "已保存数据", metrics.map(m => [m.key, m.unit || ""]), dimensions.map(d => [d.key, d.type]), data.rows.map(r => [r.name, ...dimensions.map(d => r[d.key]), ...metrics.map(m => r[m.key])])] : null,
     view, workspace.metricKey || "", workspace.chart, workspace.sort === true,
-    (workspace.messages || []).slice(-12).map(m => [m.role, m.text.slice(0, 1200)]),
+    Array.isArray(workspace.questionHistory) ? workspace.questionHistory
+      : (workspace.messages || []).filter(m => m?.role === "user" && typeof m.text === "string").map(m => m.text),
   ]);
   let first = 2166136261, second = 3339675911;
   for (let i = 0; i < content.length; i++) {

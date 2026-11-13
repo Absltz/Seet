@@ -1,27 +1,33 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { mountWorkbenchCore, hasWorkbenchArrival } from "../workbenchArrival.js";
+import { createWorkbenchCoreSession } from "./workbenchCoreSession.mjs";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 
 gsap.registerPlugin(useGSAP);
+const CoreSession = createContext(null);
 
 // 与主页交接同一颗三维核心；直接进入工作台时创建独立的小场景。
 export function AICore({ working = false }) {
+  const session = useContext(CoreSession);
   const host = useRef(null);
   const [unavailable, setUnavailable] = useState(false);
   useEffect(() => {
-    let disposed = false, instance;
+    let disposed = false, lease;
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     const create = () => {
-      instance?.dispose();
-      mountWorkbenchCore(host.current, { reduced: preference.matches, onFailure: () => setUnavailable(true) })
-        .then(runtime => { if (disposed) runtime?.dispose(); else instance = runtime; })
-        .catch(() => { if (!disposed) setUnavailable(true); });
+      lease?.release();
+      setUnavailable(false);
+      lease = session.acquire(host.current, {
+        reduced: preference.matches,
+        onFailure: () => { if (!disposed) setUnavailable(true); },
+      });
+      lease.ready.catch(() => { if (!disposed) setUnavailable(true); });
     };
     create();
     preference.addEventListener("change", create);
-    return () => { disposed = true; preference.removeEventListener("change", create); instance?.dispose(); };
-  }, []);
+    return () => { disposed = true; preference.removeEventListener("change", create); lease?.release(); };
+  }, [session]);
   return (
     <span className={`workbench-core${working ? " working" : ""}`} aria-hidden="true">
       <span ref={host} className="workbench-core-canvas" />
@@ -30,10 +36,20 @@ export function AICore({ working = false }) {
   );
 }
 
-export default function WorkbenchSurface({ children, viewKey }) {
+export default function WorkbenchSurface({ children, viewKey, mode = "workbench" }) {
   const root = useRef(null);
+  const [session] = useState(() => createWorkbenchCoreSession(mountWorkbenchCore));
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      // 内页只暂停和移交画布，退出工作区才释放；兼容 StrictMode 的效果重放。
+      queueMicrotask(() => { if (!mounted.current) session.dispose(); });
+    };
+  }, [session]);
   useGSAP(() => {
-    if (hasWorkbenchArrival()) return;
+    if (mode !== "workbench" || hasWorkbenchArrival()) return;
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
       gsap.fromTo("[data-workbench-pane]", { y: 10, opacity: 0 }, {
@@ -42,10 +58,10 @@ export default function WorkbenchSurface({ children, viewKey }) {
       });
     });
     return () => media.revert();
-  }, { scope: root });
+  }, { scope: root, dependencies: [mode], revertOnUpdate: true });
 
   useGSAP(() => {
-    if (hasWorkbenchArrival()) return;
+    if (mode !== "workbench" || hasWorkbenchArrival()) return;
     const media = gsap.matchMedia();
     media.add("(prefers-reduced-motion: no-preference)", () => {
       const result = root.current?.querySelector(".analysis-body, .data-panel, .report-panel");
@@ -55,7 +71,7 @@ export default function WorkbenchSurface({ children, viewKey }) {
       });
     });
     return () => media.revert();
-  }, { scope: root, dependencies: [viewKey], revertOnUpdate: true });
+  }, { scope: root, dependencies: [viewKey, mode], revertOnUpdate: true });
 
-  return <div ref={root} className="app-frame agent-app canvas-workbench">{children}</div>;
+  return <CoreSession.Provider value={session}><div ref={root} className={`app-frame workspace-chrome ${mode === "workbench" ? "agent-app canvas-workbench" : mode}`}>{children}</div></CoreSession.Provider>;
 }
