@@ -378,7 +378,7 @@ export default function App() {
       previousVersion: previewSaved && !currentReport,
     });
   }
-  function generateReport() { openReport(); }
+  function generateReport() { openReport(false, Boolean(savedReport)); }
   async function openAssets(target) {
     if (busy || assetBusy || editing || records.loading) return;
     try { await records.saveNow(); navigate(target); }
@@ -1182,8 +1182,8 @@ export default function App() {
               disabled={!dataset || Boolean(draft) || editing || busy || !!pendingImport}
               onClick={generateReport}
             >
-              <Download size={16} />
-              生成报告
+              {savedReport ? <FileText size={16} /> : <Download size={16} />}
+              {savedReport ? "打开报告" : "生成报告"}
             </button>
             </div>
           </div>

@@ -13,6 +13,8 @@ import {
   Plus,
 } from "lucide-react";
 import { requestReport } from "../reportApi.mjs";
+import DataProcessingFlow from './DataProcessingFlow.jsx';
+import {reportProgress} from './reportProgress.mjs';
 import "../report.css";
 function PdfPreview({ bytes, onReady }) {
   const [pdf, setPdf] = useState(null),
@@ -160,6 +162,7 @@ export default function ReportStudio({ input, onClose, initialResult, onResult, 
     [statistical, setStatistical] = useState(false);
   const resultCallback = useRef(onResult);
   resultCallback.current = onResult;
+  const loadingProgress = reportProgress(progress, statistical);
   async function generate(allowStatistical = false) {
     const token = ++run.current;
     controller.current?.abort();
@@ -176,6 +179,7 @@ export default function ReportStudio({ input, onClose, initialResult, onResult, 
         (event) => {
           if (run.current === token) {
             setProgress(previous=>({...previous,...event}));
+            if (/统计解读|统计结果/.test(event.text || '')) setStatistical(true);
             if(event.type==='model')onModel?.(event.model);
           }
         },
@@ -220,6 +224,7 @@ export default function ReportStudio({ input, onClose, initialResult, onResult, 
       ref={dialog}
       className="report-studio"
       aria-label="分析报告生成与预览"
+      aria-busy={status === "loading"}
       onCancel={(e) => {
         e.preventDefault();
         onClose();
@@ -233,7 +238,7 @@ export default function ReportStudio({ input, onClose, initialResult, onResult, 
         <div className="report-document-title">
           <FileText size={18} />
           <strong>{result?.title || input.dataset.title}</strong>
-          <span>{result?.mode==='rules'?'统计报告':(result?.models?.join(' / ') || result?.model || progress.model || '分析报告')}</span>
+          <span>{result?.mode==='rules'?'统计报告':(result?.models?.join(' / ') || result?.model || loadingProgress.modeLabel)}</span>
         </div>
         <div className="report-header-actions">
           {status === "ready" && (
@@ -256,44 +261,32 @@ export default function ReportStudio({ input, onClose, initialResult, onResult, 
         </div>
       </header>
       {status === "loading" ? (
-        <div className="report-generating" role="status" aria-live="polite">
-          <div className="report-generating-mark" aria-hidden="true">
-            <i />
-            <i />
-            <i />
-            <i />
-            <i />
-          </div>
-          <h1>{statistical ? "正在生成统计报告" : "正在生成 AI 分析报告"}</h1>
-          <p>{progress.text}</p>
-          <ol>
-            {["核对数据、对话与分析问题", statistical ? "整理统计结果与图表" : "千问 深度思考与撰写专题", "复核图表、排版与 PDF 预览"].map(
-              (label, index) => (
-                <li
-                  key={label}
-                  className={
-                    index < progress.stage
-                      ? "complete"
-                      : index === progress.stage
-                        ? "current"
-                        : ""
-                  }
-                >
-                  {index < progress.stage ? (
-                    <Check size={17} />
-                  ) : index === progress.stage ? (
-                    <LoaderCircle size={17} className="spin" />
-                  ) : (
-                    <FileText size={17} />
-                  )}
-                  <span>{label}</span>
+        <div className="report-generating report-loading">
+          <section className="report-progress-panel" aria-labelledby="report-loading-title">
+            <div className="report-loading-intro">
+              <span className="report-loading-eyebrow"><FileText size={14}/>分析报告 · 正在生成</span>
+              <h1 id="report-loading-title">{loadingProgress.statistical ? "正在生成统计分析报告" : "正在把数据，整理成分析报告"}</h1>
+              <p>从原始数据到分析结论，每一步完成后都会在这里更新。</p>
+            </div>
+            <figure className="report-flow-figure">
+              <DataProcessingFlow working className="report-flow" label={loadingProgress.statistical ? 'Σ' : 'AI'}/>
+              <figcaption><span>原始数据</span><span>{loadingProgress.statistical ? '统计核算' : 'AI 分析'}</span><span>报告图表</span></figcaption>
+            </figure>
+            <div className="report-progress-status" role="status" aria-live="polite" aria-atomic="true">
+              <LoaderCircle size={18} className="spin" aria-hidden="true"/>
+              <div><span>当前进度</span><strong>{progress.text}</strong></div>
+              <span className="report-progress-count">{loadingProgress.completed} / 3 步已完成</span>
+            </div>
+            <ol className="report-progress-steps" aria-label="报告生成步骤">
+              {loadingProgress.steps.map((step, index) => (
+                <li key={index} className={step.status} aria-current={step.status === 'current' ? 'step' : undefined}>
+                  <span className="report-step-marker" aria-hidden="true">{step.status === 'complete' ? <Check size={16}/> : step.status === 'current' ? <LoaderCircle size={16} className="spin"/> : index + 1}</span>
+                  <div><strong>{step.label}<span>{step.status === 'complete' ? '已完成' : step.status === 'current' ? '进行中' : '待处理'}</span></strong><small>{step.detail}</small></div>
                 </li>
-              ),
-            )}
-          </ol>
-          <button onClick={onClose} className="report-cancel">
-            取消生成
-          </button>
+              ))}
+            </ol>
+            <footer className="report-progress-footer"><span>{loadingProgress.statistical ? '当前使用程序统计生成，完成后可预览与导出。' : '完成后自动打开 PDF 预览，也可随时取消。'}</span><button onClick={onClose} className="report-cancel">取消生成</button></footer>
+          </section>
         </div>
       ) : status === "error" ? (
         <div className="report-generating">

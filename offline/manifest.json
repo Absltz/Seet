@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "nodeVersion": "v22.23.5",
+  "lockSha256": "fc213172c5e13b9bb2bfb75cffa52f42a387cd0e66521bab21050ffbd7c1a374",
+  "platforms": {
+    "x64": {
+      "runtime": {
+        "arch": "x64",
+        "file": "node-v22.23.5-win-x64.zip",
+        "url": "https://nodejs.org/dist/v22.23.5/node-v22.23.5-win-x64.zip",
+        "bytes": 35630346,
+        "sha256": "4a191082e9706866830379d577d2cc8a50c776fcd9436a8d061b063ed0d9a0e3"
+      },
+      "dependencies": {
+        "arch": "x64",
+        "file": "dependencies-win-x64.zip",
+        "bytes": 75895876,
+        "sha256": "090c4d51c7324d3edb5fd1e76e908a8d50097b702b51f63884adbc70f9654621",
+        "unpackedBytes": 260295518,
+        "files": 19224
+      }
+    },
+    "arm64": {
+      "runtime": {
+        "arch": "arm64",
+        "file": "node-v22.23.5-win-arm64.zip",
+        "url": "https://nodejs.org/dist/v22.23.5/node-v22.23.5-win-arm64.zip",
+        "bytes": 31342409,
+        "sha256": "c1856817f611738c77534efbff8a5a17990593eab24046bc8d2c23a77a160d13"
+      },
+      "dependencies": {
+        "arch": "arm64",
+        "file": "dependencies-win-arm64.zip",
+        "bytes": 73631556,
+        "sha256": "98ba1c096575114d5bdd420d4010354cf82e0cca47efc5fb320ad629cb975dbc",
+        "unpackedBytes": 249012540,
+        "files": 19223
+      }
+    }
+  }
+}

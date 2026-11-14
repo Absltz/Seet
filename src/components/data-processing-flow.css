@@ -1,0 +1,5 @@
+.data-processing-flow{position:relative;color:var(--accent)}
+.data-processing-flow svg{display:block;width:100%;height:100%;overflow:visible}
+.data-processing-flow.is-working .data-processing-orbit{will-change:transform}
+.data-processing-flow.is-working .data-processing-packet{will-change:transform,opacity}
+@media(prefers-reduced-motion:reduce){.data-processing-flow .data-processing-packet{opacity:.4}.data-processing-flow.is-working :is(.data-processing-packet,.data-processing-orbit){will-change:auto}}

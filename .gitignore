@@ -1,4 +1,5 @@
 node_modules/
+.seet-install-*/
 dist/
 .env
 .env.*
